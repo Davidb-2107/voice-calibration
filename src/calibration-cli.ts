@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 
+import { readFileSync } from "node:fs";
+
 import { openInBrowser, startVoiceCalibrationUi } from "./calibration/entrypoint.js";
+
+function packageVersion(): string {
+  const raw = readFileSync(new URL("../package.json", import.meta.url), "utf8");
+  return (JSON.parse(raw) as { version?: string }).version ?? "unknown";
+}
 
 const HELP = `voice-calibration — interface locale de calibration ElevenLabs
 
@@ -12,6 +19,7 @@ Options:
   --port <port>          Port d'écoute (défaut : port libre)
   --open                 Ouvre l'interface dans le navigateur
   --allow-network        Autorise un bind non local explicitement
+  -v, --version          Affiche la version du package
   -h, --help             Affiche cette aide
 
 La calibration utilise le corpus publié et conserve ses garanties de dry-run,
@@ -32,6 +40,10 @@ function valueFor(args: string[], index: number, flag: string): string {
 }
 
 function parseArgs(args: string[]): Options | null {
+  if (args.includes("--version") || args.includes("-v")) {
+    process.stdout.write(`${packageVersion()}\n`);
+    return null;
+  }
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
     process.stdout.write(`${HELP}\n`);
     return null;

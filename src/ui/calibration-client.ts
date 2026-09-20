@@ -284,7 +284,7 @@ function renderRun(): void {
   renderResult();
   const publishButton = element<HTMLButtonElement>("publish-profile");
   const profilePublished = profilePublishedForRun(run);
-  publishButton.disabled = !run || run.status !== "succeeded" || profilePublished;
+  publishButton.disabled = !run?.status || run.status !== "succeeded" || profilePublished;
   publishButton.textContent = profilePublished
     ? "Voix déjà disponible dans les projets"
     : "Rendre la voix disponible dans les projets";
