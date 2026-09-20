@@ -16,6 +16,10 @@ import type {
 import { ConflictError } from "./ports.js";
 
 const DATA_DIR = join(homedir(), ".voice-calibration", "elevenlabs-calibration");
+// Pre-extraction installs (when this package lived inside the capcut-david CLI)
+// stored their runs under ~/.capcut-david. Fall back to that historical
+// location so existing calibration data keeps loading without a manual move.
+// Purely a data-migration shim — not a dependency on the CLI.
 const LEGACY_DATA_DIR = join(homedir(), ".capcut-david", "elevenlabs-calibration");
 const DEFAULT_DATA_DIR = !existsSync(DATA_DIR) && existsSync(LEGACY_DATA_DIR) ? LEGACY_DATA_DIR : DATA_DIR;
 const corpusQueues = new Map<string, Promise<unknown>>();

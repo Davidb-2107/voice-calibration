@@ -1,7 +1,7 @@
 /**
- * Public API of the voice-calibration package. `capcut-david calibration-ui`
- * (the CLI adapter in the root package) consumes exactly this surface; the
- * standalone `voice-calibration` bin wraps the same entrypoint.
+ * Public API of the voice-calibration package. Any consumer (the `capcut-david`
+ * engine's `calibration-ui` adapter, or other hosts) uses exactly this surface;
+ * the standalone `voice-calibration` bin wraps the same entrypoint.
  */
 export {
   type CalibrationUiOptions,
