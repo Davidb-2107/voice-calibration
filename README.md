@@ -10,12 +10,12 @@ Prérequis : Node.js 18+, `voice-calibration-mcp` dans le `PATH`, et la clé
 `ELEVENLABS_API_KEY` dans le `.env` déjà utilisé par l’environnement. La clé
 reste dans le backend ; elle n’est jamais demandée au navigateur.
 
-Le paquet vit dans le workspace npm du dépôt (`packages/voice-calibration`).
-Depuis la racine du dépôt :
+Le paquet vit dans son propre dépôt (`C:\Users\dbele\src\voice-calibration`,
+extrait de `capcut-cli-david`). Depuis la racine du dépôt :
 
 ```bash
-npm install            # installe les workspaces
-npm run build          # compile d'abord voice-calibration, puis le CLI
+npm install
+npm run build
 npx voice-calibration --open
 ```
 
@@ -57,9 +57,10 @@ Serveur local `http-server.ts`
     └── publication WPM canonique
 ```
 
-Le paquet vit dans `packages/voice-calibration` de ce dépôt ; le verbe
+Le paquet vit dans son propre dépôt (`C:\Users\dbele\src\voice-calibration`,
+extrait de `capcut-cli-david`) ; le verbe
 `capcut-david calibration-ui` du moteur est un adaptateur mince qui consomme
-l’API publique du paquet. La source WPM autoritative reste dans
+l’API publique du paquet (lien `file:../voice-calibration` côté CLI). La source WPM autoritative reste dans
 `Shared/voice-calibration/voice_wpm.json` (vault). Les projets CapCut ou
 autres consommateurs utilisent ensuite les profils publiés ; ils ne sont pas
 nécessaires pour lancer cet outil.
