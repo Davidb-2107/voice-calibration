@@ -152,7 +152,10 @@ async function loadVoiceName(): Promise<void> {
   state.voiceNameStatus = "loading";
   renderResult();
   try {
-    const result = await api(`/voices/${encodeURIComponent(voiceRef)}`);
+    const result = await api(`/voices/${encodeURIComponent(voiceRef)}`, {
+      method: "GET",
+      headers: state.nonce ? { "X-Calibration-Nonce": state.nonce } : {},
+    });
     const body = result.body && typeof result.body === "object" ? (result.body as JsonRecord) : {};
     const name = body.name;
     state.voiceName = typeof name === "string" && name.trim() ? name.trim() : null;
