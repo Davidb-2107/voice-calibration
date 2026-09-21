@@ -261,10 +261,9 @@ function renderRun(): void {
       raw.billable_characters === undefined ? "" : `${String(raw.billable_characters)} caractères facturables`,
       raw.estimated_cost_usd === undefined ? "" : `coût estimé : ${String(raw.estimated_cost_usd)} USD`,
     ].filter(Boolean);
-    const nextStep =
-      state.executionInProgress
-        ? "Le calibrage réel est en cours. Ne fermez pas cette page."
-        : status === "approved"
+    const nextStep = state.executionInProgress
+      ? "Le calibrage réel est en cours. Ne fermez pas cette page."
+      : status === "approved"
         ? "Le calibrage réel n’est pas encore lancé."
         : status === "succeeded"
           ? "Le calibrage réel est terminé. Consultez l’onglet Résultat."
