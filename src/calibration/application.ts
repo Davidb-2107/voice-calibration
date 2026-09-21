@@ -359,11 +359,7 @@ export class CalibrationApplication {
     return safeError(error, redact ? (value) => redact(value) : undefined);
   }
 
-  private async assertVoiceNotCalibrated(
-    workspaceId: string,
-    voiceRef: string,
-    language: "fr" | "en",
-  ): Promise<void> {
+  private async assertVoiceNotCalibrated(workspaceId: string, voiceRef: string, language: "fr" | "en"): Promise<void> {
     if (this.canonical.findPublished) {
       try {
         const published = await this.canonical.findPublished({ voiceRef, language });
@@ -390,17 +386,10 @@ export class CalibrationApplication {
     }
   }
 
-  private async assertNoConflictingRun(
-    workspaceId: string,
-    voiceRef: string,
-    excludeRunId?: string,
-  ): Promise<void> {
+  private async assertNoConflictingRun(workspaceId: string, voiceRef: string, excludeRunId?: string): Promise<void> {
     const runs = await this.repositories.runs.list(workspaceId);
     const existing = runs.find(
-      (run) =>
-        run.id !== excludeRunId &&
-        run.request.voiceRef === voiceRef &&
-        BLOCKING_RUN_STATUSES.has(run.status),
+      (run) => run.id !== excludeRunId && run.request.voiceRef === voiceRef && BLOCKING_RUN_STATUSES.has(run.status),
     );
     if (!existing) return;
 

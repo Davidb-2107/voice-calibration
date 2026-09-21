@@ -8,8 +8,8 @@
 Le paquet est autonome : son identité est `voice-calibration`, son point
 d’entrée est `dist/calibration-cli.js` et son API publique est exportée depuis
 la racine du paquet. Il vit dans son propre dépôt (`C:\Users\dbele\src\voice-calibration`,
-extrait de `capcut-cli-david`) ; le verbe `capcut-david calibration-ui`
-(`src/commands/calibration-ui.ts` du CLI `capcut-cli-david`) est l’adaptateur officiel
+extrait de `le dépôt CLI`) ; le verbe `capcut-david calibration-ui`
+(`src/commands/calibration-ui.ts` du CLI `le dépôt CLI`) est l’adaptateur officiel
 du moteur et ne consomme que cette API publique (lien `file:../voice-calibration`).
 
 Ce document décrit les composants réellement utilisés par le MVP local. Il

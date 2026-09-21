@@ -152,7 +152,10 @@ async function loadVoiceName(): Promise<void> {
   state.voiceNameStatus = "loading";
   renderResult();
   try {
-    const result = await api(`/voices/${encodeURIComponent(voiceRef)}`);
+    const result = await api(`/voices/${encodeURIComponent(voiceRef)}`, {
+      method: "GET",
+      headers: state.nonce ? { "X-Calibration-Nonce": state.nonce } : {},
+    });
     const body = result.body && typeof result.body === "object" ? (result.body as JsonRecord) : {};
     const name = body.name;
     state.voiceName = typeof name === "string" && name.trim() ? name.trim() : null;
@@ -258,10 +261,9 @@ function renderRun(): void {
       raw.billable_characters === undefined ? "" : `${String(raw.billable_characters)} caractères facturables`,
       raw.estimated_cost_usd === undefined ? "" : `coût estimé : ${String(raw.estimated_cost_usd)} USD`,
     ].filter(Boolean);
-    const nextStep =
-      state.executionInProgress
-        ? "Le calibrage réel est en cours. Ne fermez pas cette page."
-        : status === "approved"
+    const nextStep = state.executionInProgress
+      ? "Le calibrage réel est en cours. Ne fermez pas cette page."
+      : status === "approved"
         ? "Le calibrage réel n’est pas encore lancé."
         : status === "succeeded"
           ? "Le calibrage réel est terminé. Consultez l’onglet Résultat."

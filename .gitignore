@@ -5,3 +5,11 @@ dist/
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# secrets (audit CLI-M1 / VC-hygiene) - never commit environment files
+.env
+.env.*
+!.env.example
+
+# stray lint output
+*.out.txt

@@ -584,7 +584,17 @@ test("the HTTP API returns only the requested voice reference and name", async (
   const ui = await startCalibrationUi({ application: app, host: "127.0.0.1", port: 0 });
   t.after(async () => ui.close());
 
-  const response = await fetch(`${ui.url}/api/v1/voices/voice-1`);
+  // Audit VC-MAJOR1: the voice lookup triggers a billable ElevenLabs call,
+  // so it now requires the session nonce like every mutation route.
+  const bootstrap = await (await fetch(`${ui.url}/api/v1/bootstrap`)).json();
+  const nonce = bootstrap.sessionNonce;
+
+  const missingNonce = await fetch(`${ui.url}/api/v1/voices/voice-1`);
+  strictEqual(missingNonce.status, 409);
+
+  const response = await fetch(`${ui.url}/api/v1/voices/voice-1`, {
+    headers: { "x-calibration-nonce": nonce },
+  });
   strictEqual(response.status, 200);
   deepStrictEqual(await response.json(), { voiceRef: "voice-1", name: "Voix française" });
   deepStrictEqual(calls, ["voice-1"]);

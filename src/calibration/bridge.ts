@@ -742,7 +742,8 @@ async function readPublishedWpm(
   const data = JSON.parse(await readFile(wpmPath, "utf8")) as Record<string, Record<string, unknown>>;
   const record = data[input.voiceRef];
   if (!record || typeof record !== "object") return null;
-  const profile = language === "en" ? resultObject(resultObject(record.profiles_by_lang).en) : resultObject(record.profile);
+  const profile =
+    language === "en" ? resultObject(resultObject(record.profiles_by_lang).en) : resultObject(record.profile);
   if (Object.keys(profile).length === 0) return null;
   const key = language === "en" ? "wpm_calibrated_by_lang" : "wpm_calibrated";
   const wpm = language === "en" ? resultObject(record?.[key]).en : record?.[key];

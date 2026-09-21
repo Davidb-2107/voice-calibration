@@ -229,6 +229,9 @@ async function dispatch(
     }
     const voiceMatch = /^\/api\/v1\/voices\/([^/]+)$/.exec(url.pathname);
     if (method === "GET" && voiceMatch) {
+      // Audit VC-MAJOR1: this route triggers a billable ElevenLabs lookup, so
+      // it requires the session nonce like every other credential-consuming route.
+      requireNonce(request, application);
       let voiceRef: string;
       try {
         voiceRef = decodeURIComponent(voiceMatch[1]);
