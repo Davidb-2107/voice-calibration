@@ -23,7 +23,7 @@
     "test": "node --test --test-reporter=spec",
     "typecheck": "tsc --noEmit",
     "lint": "biome ci --formatter-enabled=false .",
-    "dev": "node --import tsx src/calibration-cli.ts",
+    "dev": "npm run build && node dist/calibration-cli.js --open",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

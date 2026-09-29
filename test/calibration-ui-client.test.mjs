@@ -136,6 +136,7 @@ test("client resynchronizes the run after execute returns an HTTP failure", asyn
     "publish-profile",
   ];
   const elements = new Map(ids.map((id) => [id, new FakeElement(id)]));
+  elements.delete("summary-refresh");
   const views = ["home", "corpus", "prepare", "dry-run", "result"].map(
     (view) => new FakeElement(`view-${view}`),
   );

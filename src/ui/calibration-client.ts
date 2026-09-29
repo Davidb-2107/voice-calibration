@@ -234,13 +234,14 @@ function renderCorpus(): void {
 }
 
 function renderObservationSummary(): void {
-  const rows = element<HTMLElement>("observation-summary-rows");
-  const totals = element<HTMLElement>("observation-summary-total");
+  const rows = document.getElementById("observation-summary-rows");
+  const totals = document.getElementById("observation-summary-total");
+  const status = document.getElementById("observation-summary-status");
+  if (!rows || !totals || !status) return;
   rows.replaceChildren();
   totals.replaceChildren();
   const summary = state.bootstrap?.observationSummary as JsonRecord | undefined;
   const voices = Array.isArray(summary?.voices) ? (summary.voices as JsonRecord[]) : [];
-  const status = element<HTMLElement>("observation-summary-status");
   if (summary?.sourceAvailable !== true) {
     status.textContent = "Corpus canonique indisponible ; réessayez après avoir vérifié sa configuration.";
     return;
@@ -467,10 +468,9 @@ function bind(): void {
     "click",
     () => void refresh().catch((error) => showStatus(String(error.message), true)),
   );
-  element("summary-refresh").addEventListener(
-    "click",
-    () => void refresh().catch((error) => showStatus(String(error.message), true)),
-  );
+  document
+    .getElementById("summary-refresh")
+    ?.addEventListener("click", () => void refresh().catch((error) => showStatus(String(error.message), true)));
   element("prepare-form").addEventListener(
     "submit",
     (event) => void prepare(event).catch((error) => showStatus(String(error.message), true)),

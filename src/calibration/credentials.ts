@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 
 import type { ConfigStatus, CredentialProvider } from "./bridge.js";
@@ -11,6 +12,7 @@ export interface CredentialOptions {
   env?: Record<string, string | undefined>;
   cwd?: string;
   envFile?: string;
+  vaultRoot?: string;
 }
 
 export interface VoiceDirectoryOptions {
@@ -48,12 +50,16 @@ function ancestorDirectories(start: string): string[] {
   return result;
 }
 
-function discoverEnvFiles(cwd: string): string[] {
+function discoverEnvFiles(cwd: string, configuredVaultRoot?: string): string[] {
   const ancestors = ancestorDirectories(cwd);
   const projectsDirectory = ancestors.find((directory) => basename(directory) === "Projects");
-  const vaultRoot = ancestors.find(
-    (directory) => existsSync(join(directory, "Projects")) && existsSync(join(directory, "Shared")),
-  );
+  const isVaultRoot = (directory: string) =>
+    existsSync(join(directory, "Projects")) && existsSync(join(directory, "Shared"));
+  const vaultRoot =
+    ancestors.find(isVaultRoot) ??
+    [configuredVaultRoot, join(homedir(), "Documents", "ObsidianVault", "Wiki_Claude")].find(
+      (directory) => directory && isVaultRoot(directory),
+    );
   const resolvedProjectsDirectory = projectsDirectory ?? (vaultRoot ? join(vaultRoot, "Projects") : undefined);
   if (!resolvedProjectsDirectory)
     return ancestors.flatMap((directory) => [
@@ -75,7 +81,7 @@ function discoverEnvFiles(cwd: string): string[] {
 function readDiscoveredEnv(options: CredentialOptions): Record<string, string> {
   const files = options.envFile
     ? [resolve(options.cwd ?? process.cwd(), options.envFile)]
-    : discoverEnvFiles(options.cwd ?? process.cwd());
+    : discoverEnvFiles(options.cwd ?? process.cwd(), options.vaultRoot);
   const result: Record<string, string> = {};
   for (const file of files) {
     if (!existsSync(file)) continue;
