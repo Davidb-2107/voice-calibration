@@ -256,7 +256,7 @@ function renderObservationSummary(): void {
     row.append(name);
     for (const key of keys) {
       const cell = document.createElement("td");
-      const value = typeof voice[key] === "number" ? voice[key] as number : 0;
+      const value = typeof voice[key] === "number" ? (voice[key] as number) : 0;
       cell.textContent = String(value);
       aggregate[key] += value;
       row.append(cell);
