@@ -13,3 +13,6 @@ dist/
 
 # stray lint output
 *.out.txt
+
+# local temporary files
+/temp/
