@@ -15,9 +15,12 @@ extrait de `capcut-cli-david`). Depuis la racine du dépôt :
 
 ```bash
 npm install
-npm run build
-npx voice-calibration --open
+npm run dev
 ```
+
+Cette commande compile l’interface puis démarre le serveur local et ouvre le
+navigateur. Pour lancer sans ouverture automatique du navigateur, utilisez
+`npm run build` puis `node dist/calibration-cli.js`.
 
 Via l’entrée CLI officielle du moteur, l’adaptateur équivalent est :
 

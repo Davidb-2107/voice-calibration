@@ -320,6 +320,21 @@ test("credential provider discovers the central Projects env from a Shared proje
   return provider.status().then((status) => deepStrictEqual(status, { configured: true }));
 });
 
+test("credential provider discovers the vault Projects env when the app is outside the vault", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "calibration-external-vault-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const vault = join(root, "Wiki_Claude");
+  const externalProject = join(root, "src", "voice-calibration");
+  mkdirSync(join(vault, "Projects"), { recursive: true });
+  mkdirSync(join(vault, "Shared"), { recursive: true });
+  mkdirSync(externalProject, { recursive: true });
+  writeFileSync(join(vault, "Projects", ".env"), "ELEVENLABS_API_KEY=from-vault\n");
+
+  const provider = createCredentialProvider({ cwd: externalProject, vaultRoot: vault });
+  deepStrictEqual(await provider.status(), { configured: true });
+  strictEqual((await provider.forRun()).secret, "from-vault");
+});
+
 test("voice directory resolves a voice name with the server-side ElevenLabs credential", async () => {
   const calls = [];
   const credentials = createCredentialProvider({ env: { ELEVENLABS_API_KEY: "secret" } });
