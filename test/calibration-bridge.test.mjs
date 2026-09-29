@@ -1,5 +1,5 @@
 import { deepStrictEqual, rejects, strictEqual } from "node:assert";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
@@ -372,6 +372,41 @@ test("canonical profile port detects an existing published voice before calibrat
       },
     );
     strictEqual(await canonical.findPublished?.({ voiceRef: "voice-2", language: "fr" }), null);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("canonical observation summary follows raw-clean and post-processing protocol without editing history", async () => {
+  const root = mkdtempSync(join(tmpdir(), "canonical-observations-"));
+  try {
+    const wpmPath = join(root, "voice_wpm.json");
+    const source = {
+      _default: 200,
+      Voice: {
+        observed_runs: [
+          { words: 100, duration_s: 30, duration_raw_s: 60, postproc: "cut", verified: true },
+          { words: 100, duration_s: 40, duration_raw_s: 50, postproc: "trim", verified: false },
+          { words: 100, duration_s: 60, postproc: "raw", verified: true },
+          { words: 100, duration_s: 60, postproc: "raw", verified: true, language: "en" },
+          { words: 100, duration_s: 30, duration_raw_s: 60, postproc: "cut", verified: true, outlier_excluded: true },
+          { words: 100, duration_s: 30, verified: true },
+          { words: 100, duration_s: 30, postproc: "vendor-special", verified: true },
+        ],
+      },
+      Empty: { observed_runs: [] },
+    };
+    writeFileSync(wpmPath, JSON.stringify(source));
+    const before = JSON.stringify(source);
+    const summary = await createCanonicalProfilePort({ wpmPath }).getObservationSummary?.();
+    deepStrictEqual(summary, {
+      sourceAvailable: true,
+      voices: [
+        { voiceRef: "Voice", total: 7, raw: 2, rawClean: 3, trim: 1, cut: 2, other: 1, unknown: 1 },
+        { voiceRef: "Empty", total: 0, raw: 0, rawClean: 0, trim: 0, cut: 0, other: 0, unknown: 0 },
+      ],
+    });
+    strictEqual(JSON.stringify(JSON.parse(readFileSync(wpmPath, "utf8"))), before);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -38,6 +38,9 @@
       @keyframes calibration-spin { to { transform: rotate(360deg); } }
       @media (prefers-reduced-motion: reduce) { .progress-note::before { animation: none; } }
       #status { min-height: 1.5em; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border-bottom: 1px solid #334155; padding: .5rem; text-align: right; white-space: nowrap; }
+      th:first-child { text-align: left; }
     </style>
     <script type="module">/*__CALIBRATION_TEMPLATE__*/</script>
     <script src="/calibration-client.js" defer></script>
@@ -48,6 +51,7 @@
       <p id="status" class="muted" role="status">Chargement…</p>
       <nav aria-label="Vues">
         <button data-view="home">Accueil / configuration</button>
+        <button data-view="summary">Récapitulatif</button>
         <button data-view="corpus">Corpus</button>
         <button data-view="prepare">Préparer</button>
         <button data-view="dry-run">Simulation (dry-run)</button>
@@ -58,6 +62,20 @@
         <h2>Accueil / configuration</h2>
         <p id="config-status">Configuration ElevenLabs inconnue.</p>
         <button id="refresh">Rafraîchir</button>
+      </section>
+
+      <section id="view-summary" class="view">
+        <h2>Récapitulatif des observations</h2>
+        <p id="observation-summary-status" class="muted">Chargement…</p>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Voix</th><th>Total historique</th><th>Raw-clean</th><th>Raw</th><th>Trim</th><th>Cut</th><th>Autre</th><th>Inconnu</th></tr></thead>
+            <tbody id="observation-summary-rows"></tbody>
+            <tfoot id="observation-summary-total"></tfoot>
+          </table>
+        </div>
+        <p class="muted">Raw-clean suit ADR-0001 : durée_raw_s si présente, sinon duration_s uniquement pour postproc=raw ; observation vérifiée et non exclue comme outlier. Ce compteur recoupe raw, trim, cut ou autre selon la disponibilité de la durée brute.</p>
+        <button id="summary-refresh">Rafraîchir</button>
       </section>
 
       <section id="view-corpus" class="view">

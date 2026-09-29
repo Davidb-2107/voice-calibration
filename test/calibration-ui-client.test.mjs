@@ -119,6 +119,10 @@ test("client resynchronizes the run after execute returns an HTTP failure", asyn
   const ids = [
     "status",
     "config-status",
+    "observation-summary-status",
+    "observation-summary-rows",
+    "observation-summary-total",
+    "summary-refresh",
     "corpus-items",
     "corpus-version",
     "dry-run-state",
@@ -176,7 +180,15 @@ test("client resynchronizes the run after execute returns an HTTP failure", asyn
     if (url === "/api/v1/bootstrap") {
       return invalidBootstrap
         ? invalidJsonResponse()
-        : response({ sessionNonce: "nonce", config: { configured: true }, profiles: [] });
+        : response({
+            sessionNonce: "nonce",
+            config: { configured: true },
+            profiles: [],
+            observationSummary: {
+              sourceAvailable: true,
+              voices: [{ voiceRef: "voice-a", total: 3, rawClean: 1, raw: 2, trim: 0, cut: 1, other: 0, unknown: 0 }],
+            },
+          });
     }
     if (url === "/api/v1/corpus") {
       return response(
@@ -227,6 +239,8 @@ test("client resynchronizes the run after execute returns an HTTP failure", asyn
 
   vm.runInContext(CLIENT, context);
   await flush();
+  strictEqual(elements.get("observation-summary-rows").children.length, 1);
+  strictEqual(elements.get("observation-summary-rows").children[0].children[2].textContent, "1");
   const corpusRow = elements.get("corpus-items").children[0];
   strictEqual(corpusRow.children.length, 2, "corpus rows must expose only a label and read-only text");
   strictEqual(corpusRow.children[0].textContent, "Texte 1", "corpus rows must be visibly numbered");
@@ -330,6 +344,10 @@ test("client restores the latest run and report after a page reload", async () =
   const ids = [
     "status",
     "config-status",
+    "observation-summary-status",
+    "observation-summary-rows",
+    "observation-summary-total",
+    "summary-refresh",
     "corpus-items",
     "corpus-version",
     "dry-run-state",
