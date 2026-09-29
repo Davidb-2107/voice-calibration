@@ -7,6 +7,7 @@ import type {
   CredentialProvider,
   DryRunResult,
   ExecutionResult,
+  ObservationSummary,
 } from "./bridge.js";
 import { MVP_PRECISION_RUNS } from "./constants.js";
 import type {
@@ -41,6 +42,7 @@ export interface BootstrapView {
   activeCorpus: CorpusVersion | null;
   profiles: VoiceProfile[];
   recentRuns: CalibrationRun[];
+  observationSummary?: ObservationSummary;
 }
 
 export interface CorpusView {
@@ -451,11 +453,12 @@ export class CalibrationApplication {
 
   async getBootstrap(workspaceId = DEFAULT_WORKSPACE): Promise<BootstrapView> {
     await this.ensureRecovered(workspaceId);
-    const [config, activeCorpus, profiles, recentRuns] = await Promise.all([
+    const [config, activeCorpus, profiles, recentRuns, observationSummary] = await Promise.all([
       this.credentials ? this.credentials.status() : Promise.resolve({ configured: true }),
       this.repositories.corpus.getActiveVersion(workspaceId),
       this.repositories.profiles.list(workspaceId),
       this.repositories.runs.list(workspaceId),
+      this.canonical.getObservationSummary?.(),
     ]);
     return {
       sessionNonce: this.sessionNonce,
@@ -463,6 +466,7 @@ export class CalibrationApplication {
       activeCorpus,
       profiles,
       recentRuns: recentRuns.sort(recentRunSort).slice(0, 20),
+      observationSummary,
     };
   }
 

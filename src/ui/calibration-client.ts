@@ -233,6 +233,49 @@ function renderCorpus(): void {
   }
 }
 
+function renderObservationSummary(): void {
+  const rows = element<HTMLElement>("observation-summary-rows");
+  const totals = element<HTMLElement>("observation-summary-total");
+  rows.replaceChildren();
+  totals.replaceChildren();
+  const summary = state.bootstrap?.observationSummary as JsonRecord | undefined;
+  const voices = Array.isArray(summary?.voices) ? (summary.voices as JsonRecord[]) : [];
+  const status = element<HTMLElement>("observation-summary-status");
+  if (summary?.sourceAvailable !== true) {
+    status.textContent = "Corpus canonique indisponible ; réessayez après avoir vérifié sa configuration.";
+    return;
+  }
+  status.textContent = `${voices.length} voix · actualisé à la demande`;
+  const keys = ["total", "rawClean", "raw", "trim", "cut", "other", "unknown"];
+  const aggregate = Object.fromEntries(keys.map((key) => [key, 0])) as Record<string, number>;
+  for (const voice of voices) {
+    const row = document.createElement("tr");
+    const name = document.createElement("th");
+    name.scope = "row";
+    name.textContent = String(voice.voiceRef ?? "");
+    row.append(name);
+    for (const key of keys) {
+      const cell = document.createElement("td");
+      const value = typeof voice[key] === "number" ? voice[key] as number : 0;
+      cell.textContent = String(value);
+      aggregate[key] += value;
+      row.append(cell);
+    }
+    rows.append(row);
+  }
+  const totalRow = document.createElement("tr");
+  const label = document.createElement("th");
+  label.scope = "row";
+  label.textContent = "Total";
+  totalRow.append(label);
+  for (const key of keys) {
+    const cell = document.createElement("td");
+    cell.textContent = String(aggregate[key]);
+    totalRow.append(cell);
+  }
+  totals.append(totalRow);
+}
+
 function renderRun(): void {
   const run = state.run;
   const status = run ? String(run.status) : "";
@@ -296,6 +339,7 @@ async function refresh(): Promise<void> {
   const hadRun = state.run !== null;
   const bootstrap = await api("/bootstrap");
   state.bootstrap = bootstrap.body as JsonRecord;
+  renderObservationSummary();
   state.nonce = state.bootstrap.sessionNonce as string;
   const recentRuns = Array.isArray(state.bootstrap.recentRuns) ? state.bootstrap.recentRuns : [];
   const latestRun =
@@ -420,6 +464,10 @@ function bind(): void {
     button.addEventListener("click", () => activateView(button.dataset.view ?? "home"));
   });
   element("refresh").addEventListener(
+    "click",
+    () => void refresh().catch((error) => showStatus(String(error.message), true)),
+  );
+  element("summary-refresh").addEventListener(
     "click",
     () => void refresh().catch((error) => showStatus(String(error.message), true)),
   );

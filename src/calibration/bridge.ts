@@ -66,6 +66,11 @@ export interface CanonicalProfilePort {
     voiceRef: string;
     language?: "fr" | "en";
   }): Promise<{ canonicalRef: string; wpm: number } | null>;
+  getObservationSummary?(): Promise<ObservationSummary>;
+}
+export interface ObservationSummary {
+  voices: Array<{ voiceRef: string; total: number; raw: number; rawClean: number; trim: number; cut: number; other: number; unknown: number }>;
+  sourceAvailable: boolean;
 }
 export interface CalibrationBridge {
   getSchema(): Promise<unknown>;
@@ -709,6 +714,9 @@ export function createCanonicalProfilePort(
   } = {},
 ): CanonicalProfilePort {
   return {
+    async getObservationSummary() {
+      return readObservationSummary(options.wpmPath);
+    },
     async findPublished(input) {
       return readPublishedWpm(input, options.wpmPath, options.language ?? "fr");
     },
@@ -720,6 +728,40 @@ export function createCanonicalProfilePort(
       return { canonicalRef: result.canonicalRef };
     },
   };
+}
+
+async function readObservationSummary(wpmPath = process.env.VOICE_WPM_PATH): Promise<ObservationSummary> {
+  if (!wpmPath) return { voices: [], sourceAvailable: false };
+  try {
+    const data = JSON.parse(await readFile(wpmPath, "utf8")) as Record<string, unknown>;
+    const voices = Object.entries(data).filter(([voiceRef, value]) =>
+      voiceRef !== "_default" && value !== null && typeof value === "object" && !Array.isArray(value),
+    ).map(([voiceRef, value]) => {
+      const record = resultObject(value);
+      const runs = Array.isArray(record.observed_runs) ? record.observed_runs : [];
+      const counts = { voiceRef, total: runs.length, raw: 0, rawClean: 0, trim: 0, cut: 0, other: 0, unknown: 0 };
+      for (const value of runs) {
+        const run = resultObject(value);
+        const postproc = typeof run.postproc === "string" ? run.postproc.trim().toLowerCase() : "";
+        const rawDuration = run.duration_raw_s ?? (postproc === "raw" ? run.duration_s : undefined);
+        if (run.verified === true && run.outlier_excluded !== true &&
+            typeof run.words === "number" && Number.isFinite(run.words) && run.words > 0 &&
+            typeof rawDuration === "number" && Number.isFinite(rawDuration) && rawDuration > 0) {
+          counts.rawClean += 1;
+        }
+        if (postproc === "raw") {
+          counts.raw += 1;
+        } else if (postproc === "trim") counts.trim += 1;
+        else if (postproc === "cut") counts.cut += 1;
+        else if (postproc) counts.other += 1;
+        else counts.unknown += 1;
+      }
+      return counts;
+    });
+    return { voices, sourceAvailable: true };
+  } catch {
+    return { voices: [], sourceAvailable: false };
+  }
 }
 
 async function verifyWpmFile(
