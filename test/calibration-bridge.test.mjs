@@ -29,6 +29,72 @@ const resolvedRequest = {
   postproc: "cut",
 };
 
+test("bridge rejects foreign workspace records in every core operation", async () => {
+  const record = {
+    run_id: "core-run-1", workspace_id: "workspace-b", revision: 3, status: "succeeded",
+    context: {}, request: {}, request_digest: "v1:sha256:test", proposal: {}, approval: null,
+    result: { status: "ok", precision_stats: { median: 148 }, publication: {
+      status: "published", canonical_ref: "python://wpm", wpm: 148,
+    } },
+    created_at: "2026-09-02T10:00:00Z", updated_at: "2026-09-02T10:01:00Z",
+  };
+  const transport = {
+    async schema() { return { type: "object" }; },
+    async callTool() { return { response: record, emitted: true, stderr: "" }; },
+    async close() {},
+  };
+  const bridge = createCalibrationBridge({ transport, credentials: createCredentialProvider({
+    env: { ELEVENLABS_API_KEY: "test-secret" },
+  }) });
+  const context = { workspaceId: "workspace-a", runId: "core-run-1" };
+  for (const operation of [
+    () => bridge.propose({ workspaceId: context.workspaceId, request: resolvedRequest }),
+    () => bridge.approve({ ...context, requestDigest: record.request_digest }),
+    () => bridge.getRun(context),
+    () => bridge.execute({ ...context, coreRunId: context.runId, idempotencyKey: context.runId, snapshot: resolvedRequest }),
+    () => bridge.reconcile({ ...context, coreRunId: context.runId, idempotencyKey: context.runId }),
+    () => bridge.publish(context),
+  ]) await rejects(operation(), /calibration core workspace mismatch/);
+});
+
+test("bridge rejects invalid workspace before credentials or transport", async () => {
+  let calls = 0;
+  const touch = async () => { calls += 1; throw new Error("unexpected IO"); };
+  const bridge = createCalibrationBridge({
+    transport: { schema: touch, call: touch, callTool: touch, async close() {} },
+    credentials: { forRun: touch },
+  });
+  const context = { workspaceId: "WORKSPACE-A", runId: "core-run-1" };
+  for (const operation of [
+    () => bridge.propose({ workspaceId: context.workspaceId, request: resolvedRequest }),
+    () => bridge.approve({ ...context, requestDigest: "digest" }),
+    () => bridge.getRun(context),
+    () => bridge.execute({ ...context, coreRunId: context.runId, idempotencyKey: context.runId, snapshot: resolvedRequest }),
+    () => bridge.reconcile({ ...context, coreRunId: context.runId, idempotencyKey: context.runId }),
+    () => bridge.publish(context),
+  ]) await rejects(operation(), /invalid workspaceId/);
+  strictEqual(calls, 0);
+});
+
+test("bridge rejects supplied invalid workspace with or without a core run", async (t) => {
+  for (const workspaceId of ["", null, false, 0, "WORKSPACE-A", "../workspace-a", {}]) {
+    for (const coreRunId of ["core-run-1", undefined]) {
+      for (const method of ["execute", "reconcile"]) {
+        await t.test(`${method}: ${JSON.stringify(workspaceId)}, coreRunId=${coreRunId}`, async () => {
+          let calls = 0;
+          const touch = async () => { calls += 1; throw new Error("unexpected IO"); };
+          const bridge = createCalibrationBridge({
+            transport: { schema: touch, call: touch, callTool: touch, async close() {} },
+            credentials: { forRun: touch },
+          });
+          await rejects(bridge[method]({ workspaceId, coreRunId, runId: "r", idempotencyKey: "r", snapshot: resolvedRequest }), /invalid workspaceId/);
+          strictEqual(calls, 0);
+        });
+      }
+    }
+  }
+});
+
 function fakeTransport(options = {}) {
   const schema = { type: "object", additionalProperties: false };
   const transport = {

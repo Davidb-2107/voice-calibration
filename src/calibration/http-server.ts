@@ -8,6 +8,7 @@ import {
   NotFoundError,
   UnavailableError,
 } from "./application.js";
+import { assertWorkspaceId, InvalidWorkspaceIdError } from "./domain.js";
 import { ConflictError } from "./ports.js";
 import { redactSensitive } from "./redaction.js";
 
@@ -50,6 +51,7 @@ function stringHeader(value: string | string[] | undefined): string | undefined 
 }
 
 function errorPayload(error: unknown): { code: string; message: string } {
+  if (error instanceof InvalidWorkspaceIdError) return { code: error.code, message: error.message };
   if (error instanceof HttpError) return { code: error.code, message: error.message };
   if (error instanceof NotFoundError) return { code: "not_found", message: error.message };
   if (error instanceof ContractValidationError) return { code: error.code, message: error.message };
@@ -84,6 +86,7 @@ function executionHttpError(report: { error: { code: string; message: string } |
 }
 
 function statusForError(error: unknown): number {
+  if (error instanceof InvalidWorkspaceIdError) return 400;
   if (error instanceof HttpError) return error.status;
   if (error instanceof NotFoundError) return 404;
   if (error instanceof ContractValidationError) return 422;
@@ -138,8 +141,15 @@ async function parseBody(request: IncomingMessage): Promise<Record<string, unkno
   return value;
 }
 
-function workspace(url: URL, options: CalibrationHttpServerOptions): string {
-  return url.searchParams.get("workspaceId") ?? options.workspaceId ?? DEFAULT_WORKSPACE;
+function assertRequestWorkspace(url: URL, body: Record<string, unknown> | undefined, workspaceId: string): void {
+  const supplied: unknown[] = url.searchParams.getAll("workspaceId");
+  for (const candidate of [body, body?.input, body?.draft]) {
+    if (isRecord(candidate) && Object.hasOwn(candidate, "workspaceId")) supplied.push(candidate.workspaceId);
+  }
+  for (const value of supplied) {
+    assertWorkspaceId(value);
+    if (value !== workspaceId) throw new HttpError(400, "workspace_mismatch", "workspace does not match server instance");
+  }
 }
 
 function requireNonce(request: IncomingMessage, application: CalibrationApplication): void {
@@ -185,9 +195,9 @@ async function dispatch(
   const url = new URL(request.url ?? "/", `http://${host ?? "localhost"}`);
   const method = request.method ?? "GET";
   const application = options.application;
-  const workspaceId = workspace(url, options);
-
   try {
+    const workspaceId = options.workspaceId ?? DEFAULT_WORKSPACE;
+    assertRequestWorkspace(url, undefined, workspaceId);
     if (method === "GET" && url.pathname === "/api/v1/bootstrap") {
       sendJson(response, 200, await application.getBootstrap(workspaceId));
       return;
@@ -206,6 +216,7 @@ async function dispatch(
       requireNonce(request, application);
       const expectedRevision = parseRevision(stringHeader(request.headers["if-match"]));
       const body = await parseBody(request);
+      assertRequestWorkspace(url, body, workspaceId);
       const draft = isRecord(body.draft) ? body.draft : body;
       const saved = await application.saveDraft(workspaceId, draft as never, expectedRevision);
       sendJson(response, 200, saved, { etag: `W/"corpus-draft-${saved.revision}"` });
@@ -214,6 +225,7 @@ async function dispatch(
     if (method === "POST" && url.pathname === "/api/v1/corpus/versions") {
       requireNonce(request, application);
       const body = await parseBody(request);
+      assertRequestWorkspace(url, body, workspaceId);
       const ifMatch = stringHeader(request.headers["if-match"]);
       const expectedRevision = ifMatch ? parseRevision(ifMatch) : body.expectedRevision;
       if (typeof expectedRevision !== "number" || !Number.isInteger(expectedRevision) || expectedRevision < 0) {
@@ -244,8 +256,9 @@ async function dispatch(
     if (method === "POST" && url.pathname === "/api/v1/calibration-runs/dry-run") {
       requireNonce(request, application);
       const body = await parseBody(request);
+      assertRequestWorkspace(url, body, workspaceId);
       const input = isRecord(body.input) ? body.input : body;
-      const run = await application.prepareDryRun(input as never);
+      const run = await application.prepareDryRun({ ...input, workspaceId } as never);
       sendJson(response, 201, run);
       return;
     }
@@ -254,21 +267,24 @@ async function dispatch(
     if (method === "POST" && approveMatch) {
       requireNonce(request, application);
       const body = await parseBody(request);
+      assertRequestWorkspace(url, body, workspaceId);
       if (typeof body.requestDigest !== "string")
         throw new HttpError(400, "request_digest_required", "requestDigest is required");
       sendJson(
         response,
         200,
-        await application.approve(idFromPath(url.pathname), { requestDigest: body.requestDigest }),
+        await application.approve(workspaceId, idFromPath(url.pathname), { requestDigest: body.requestDigest }),
       );
       return;
     }
     const executeMatch = /^\/api\/v1\/calibration-runs\/[^/]+\/execute$/.test(url.pathname);
     if (method === "POST" && executeMatch) {
       requireNonce(request, application);
+      const body = await parseBody(request);
+      assertRequestWorkspace(url, body, workspaceId);
       const runId = idFromPath(url.pathname);
-      const run = await application.execute(runId);
-      const failure = run.status === "failed" ? executionHttpError(await application.getReport(runId)) : null;
+      const run = await application.execute(workspaceId, runId);
+      const failure = run.status === "failed" ? executionHttpError(await application.getReport(workspaceId, runId)) : null;
       if (failure) throw failure;
       sendJson(response, 200, run);
       return;
@@ -276,15 +292,17 @@ async function dispatch(
     const reconcileMatch = /^\/api\/v1\/calibration-runs\/[^/]+\/reconcile$/.test(url.pathname);
     if (method === "POST" && reconcileMatch) {
       requireNonce(request, application);
-      sendJson(response, 200, await application.reconcile(idFromPath(url.pathname)));
+      const body = await parseBody(request);
+      assertRequestWorkspace(url, body, workspaceId);
+      sendJson(response, 200, await application.reconcile(workspaceId, idFromPath(url.pathname)));
       return;
     }
     const runMatch = /^\/api\/v1\/calibration-runs\/[^/]+$/.test(url.pathname);
     if (method === "GET" && runMatch) {
       const runId = idFromPath(url.pathname, false);
-      const run = await application.getRun(runId);
+      const run = await application.getRun(workspaceId, runId);
       if (!run) throw new NotFoundError("calibration run not found");
-      sendJson(response, 200, { ...run, report: await application.getReport(runId) });
+      sendJson(response, 200, { ...run, report: await application.getReport(workspaceId, runId) });
       return;
     }
     if (method === "GET" && url.pathname === "/api/v1/voice-profiles") {
@@ -294,9 +312,10 @@ async function dispatch(
     if (method === "POST" && url.pathname === "/api/v1/voice-profiles") {
       requireNonce(request, application);
       const body = await parseBody(request);
+      assertRequestWorkspace(url, body, workspaceId);
       const runId = typeof body.runId === "string" ? body.runId : body.sourceRunId;
       if (typeof runId !== "string" || !runId) throw new HttpError(400, "run_id_required", "runId is required");
-      sendJson(response, 201, await application.publishProfile(runId));
+      sendJson(response, 201, await application.publishProfile(workspaceId, runId));
       return;
     }
 
@@ -333,8 +352,11 @@ export function isLoopbackHost(host: string): boolean {
 }
 
 export function createCalibrationServer(options: CalibrationHttpServerOptions): Server {
+  const workspaceId = options.workspaceId === undefined ? DEFAULT_WORKSPACE : options.workspaceId;
+  assertWorkspaceId(workspaceId);
+  const fixedOptions = { ...options, workspaceId };
   return createServer((request, response) => {
-    void dispatch(request, response, options);
+    void dispatch(request, response, fixedOptions);
   });
 }
 
@@ -345,6 +367,7 @@ function urlHost(host: string): string {
 }
 
 export async function startCalibrationUi(options: CalibrationHttpServerOptions): Promise<CalibrationUiHandle> {
+  assertWorkspaceId(options.workspaceId === undefined ? DEFAULT_WORKSPACE : options.workspaceId);
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 0;
   if (!isLoopbackHost(host) && !options.allowNetwork) {

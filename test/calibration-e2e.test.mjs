@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import { deepStrictEqual, strictEqual, match } from "node:assert";
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -45,14 +45,15 @@ function fakeCanonical(options = {}) {
 
 async function body(response) { return response.json(); }
 
-test("local calibration MVP runs the standard corpus once and keeps WPM canonical", async (t) => {
+for (const workspaceId of ["local-default", "workspace-a"]) {
+test(`local calibration MVP completes in ${workspaceId}`, async (t) => {
   const root = mkdtempSync(join(tmpdir(), "calibration-e2e-"));
   const repositories = createLocalStore(root);
   const bridge = fakeBridge();
   const canonical = fakeCanonical();
   let now = new Date("2026-09-02T10:00:00.000Z");
   const application = createCalibrationApplication({ repositories, bridge, canonical, clock: { now: () => now } });
-  const ui = await startCalibrationUi({ application, host: "127.0.0.1", port: 0 });
+  const ui = await startCalibrationUi({ application, workspaceId, host: "127.0.0.1", port: 0 });
   t.after(async () => ui.close());
   const jsonHeaders = { "content-type": "application/json" };
 
@@ -66,7 +67,7 @@ test("local calibration MVP runs the standard corpus once and keeps WPM canonica
   const draft = await body(draftResponse);
   const etag = draftResponse.headers.get("etag");
   const texts = [{ id: "one", order: 1, text: "Bonjour." }, { id: "two", order: 0, text: "Le monde." }, { id: "three", order: 2, text: "Ceci est standard." }];
-  const saveResponse = await fetch(`${ui.url}/api/v1/corpus/draft`, { method: "PUT", headers: { ...nonceHeaders, "if-match": etag }, body: JSON.stringify({ ...draft, items: texts }) });
+  const saveResponse = await fetch(`${ui.url}/api/v1/corpus/draft`, { method: "PUT", headers: { ...nonceHeaders, "if-match": etag }, body: JSON.stringify(workspaceId === "local-default" ? { ...draft, items: texts } : { draft: { ...draft, items: texts } }) });
   strictEqual(saveResponse.status, 200);
   const saved = await body(saveResponse);
   const versionResponse = await fetch(`${ui.url}/api/v1/corpus/versions`, { method: "POST", headers: nonceHeaders, body: JSON.stringify({ expectedRevision: saved.revision }) });
@@ -76,7 +77,7 @@ test("local calibration MVP runs the standard corpus once and keeps WPM canonica
   const dryRunResponse = await fetch(`${ui.url}/api/v1/calibration-runs/dry-run`, {
     method: "POST",
     headers: nonceHeaders,
-    body: JSON.stringify({ workspaceId: "local-default", voiceRef: "voice-1", params: {
+    body: JSON.stringify({ ...(workspaceId === "local-default" ? { workspaceId } : {}), voiceRef: "voice-1", params: {
       model_id: "eleven_v3",
       voice_settings: { stability: 0.5, similarity_boost: 0.85, style: 0, use_speaker_boost: true },
       text_source: { kind: "inline", text: "caller text is replaced by the active corpus" },
@@ -85,6 +86,7 @@ test("local calibration MVP runs the standard corpus once and keeps WPM canonica
   });
   strictEqual(dryRunResponse.status, 201);
   const run = await body(dryRunResponse);
+  strictEqual(run.workspaceId, workspaceId);
   deepStrictEqual(bridge.state.dryRuns[0].request.params.text_source, { kind: "inline", text: "Le monde.\n\nBonjour.\n\nCeci est standard." });
 
   const changedDraft = { ...saved, items: [...texts, { id: "later", order: 3, text: "Après le dry-run." }] };
@@ -101,6 +103,9 @@ test("local calibration MVP runs the standard corpus once and keeps WPM canonica
   const executed = await body(executedResponse);
   strictEqual(executed.status, "succeeded");
   const reportRun = await body(await fetch(`${ui.url}/api/v1/calibration-runs/${run.id}`));
+  strictEqual(reportRun.reportId, `workspaces/${workspaceId}/artifacts/${run.id}/report.json`);
+  strictEqual(existsSync(join(root, "workspaces", workspaceId, "runs", `${run.id}.json`)), true);
+  strictEqual(existsSync(join(root, reportRun.reportId)), true);
   strictEqual(reportRun.report.metrics.precision_stats.median, 148);
   strictEqual(reportRun.report.providerResult.actual_cost_usd, 0.0617);
   strictEqual(canonical.calls.length, 0);
@@ -111,11 +116,11 @@ test("local calibration MVP runs the standard corpus once and keeps WPM canonica
   strictEqual(canonical.calls.length, 1);
   strictEqual((await body(await fetch(`${ui.url}/api/v1/voice-profiles`))).length, 1);
 
-  const blockedResponse = await fetch(`${ui.url}/api/v1/calibration-runs/dry-run`, { method: "POST", headers: nonceHeaders, body: JSON.stringify({ workspaceId: "local-default", voiceRef: "voice-1", params: { model_id: "eleven_v3", voice_settings: { stability: 0.5, similarity_boost: 0.85 }, mode: "precision", language: "fr", runs: 3 }, postproc: "cut" }) });
+  const blockedResponse = await fetch(`${ui.url}/api/v1/calibration-runs/dry-run`, { method: "POST", headers: nonceHeaders, body: JSON.stringify({ workspaceId, voiceRef: "voice-1", params: { model_id: "eleven_v3", voice_settings: { stability: 0.5, similarity_boost: 0.85 }, mode: "precision", language: "fr", runs: 3 }, postproc: "cut" }) });
   strictEqual(blockedResponse.status, 409);
   match((await body(blockedResponse)).error.message, /déjà un profil de calibrage publié/i);
 
-  const secondRunResponse = await fetch(`${ui.url}/api/v1/calibration-runs/dry-run`, { method: "POST", headers: nonceHeaders, body: JSON.stringify({ workspaceId: "local-default", voiceRef: "voice-2", params: { model_id: "eleven_v3", voice_settings: { stability: 0.5, similarity_boost: 0.85 }, mode: "precision", language: "fr", runs: 3 }, postproc: "cut" }) });
+  const secondRunResponse = await fetch(`${ui.url}/api/v1/calibration-runs/dry-run`, { method: "POST", headers: nonceHeaders, body: JSON.stringify({ workspaceId, voiceRef: "voice-2", params: { model_id: "eleven_v3", voice_settings: { stability: 0.5, similarity_boost: 0.85 }, mode: "precision", language: "fr", runs: 3 }, postproc: "cut" }) });
   strictEqual(secondRunResponse.status, 201);
   const secondRun = await body(secondRunResponse);
   await body(await fetch(`${ui.url}/api/v1/calibration-runs/${secondRun.id}/approve`, { method: "POST", headers: nonceHeaders, body: JSON.stringify({ requestDigest: secondRun.requestDigest }) }));
@@ -133,6 +138,7 @@ test("local calibration MVP runs the standard corpus once and keeps WPM canonica
   strictEqual((await body(lostResponse)).status, "execution_unknown");
   strictEqual(bridge.state.executions.length, originalExecutionCount + 1);
 });
+}
 
 test("profile publication fails closed when the canonical Python port fails", async () => {
   const repositories = createLocalStore(mkdtempSync(join(tmpdir(), "calibration-e2e-fail-")));

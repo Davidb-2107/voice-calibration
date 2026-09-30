@@ -387,7 +387,6 @@ async function prepare(event: SubmitEvent): Promise<void> {
   const result = await api("/calibration-runs/dry-run", {
     method: "POST",
     body: JSON.stringify({
-      workspaceId: "local-default",
       voiceRef: (form.elements.namedItem("voiceRef") as HTMLInputElement).value,
       params,
       postproc: CALIBRATION_POSTPROC,

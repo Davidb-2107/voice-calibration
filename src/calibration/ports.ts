@@ -10,11 +10,11 @@ export interface CorpusRepository {
 
 export interface CalibrationRunRepository {
   create(run: CalibrationRun): Promise<void>;
-  get(id: string): Promise<CalibrationRun | null>;
+  get(workspaceId: string, id: string): Promise<CalibrationRun | null>;
   save(run: CalibrationRun): Promise<void>;
   list(workspaceId: string): Promise<CalibrationRun[]>;
-  recoverRunning(runId: string, recoveredAt: string): Promise<CalibrationRun | null>;
-  consumeApproval?(runId: string, consumedAt: string): Promise<CalibrationRun>;
+  recoverRunning(workspaceId: string, runId: string, recoveredAt: string): Promise<CalibrationRun | null>;
+  consumeApproval?(workspaceId: string, runId: string, consumedAt: string): Promise<CalibrationRun>;
 }
 
 export interface VoiceProfileRepository {
@@ -27,8 +27,8 @@ export interface VoiceDirectoryPort {
 }
 
 export interface ArtifactStore {
-  put(runId: string, name: string, bytes: Uint8Array): Promise<string>;
-  get(ref: string): Promise<Uint8Array>;
+  put(workspaceId: string, runId: string, name: string, bytes: Uint8Array): Promise<string>;
+  get(workspaceId: string, ref: string): Promise<Uint8Array>;
 }
 
 export interface LocalStore {

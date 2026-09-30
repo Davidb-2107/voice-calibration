@@ -4,10 +4,12 @@ import { join } from "node:path";
 import { createCalibrationApplication } from "./application.js";
 import { createCalibrationBridge, createCanonicalProfilePort } from "./bridge.js";
 import { createCredentialProvider, createVoiceDirectoryProvider, findVaultRoot } from "./credentials.js";
+import { assertWorkspaceId } from "./domain.js";
 import { type CalibrationUiHandle, startCalibrationUi } from "./http-server.js";
 import { createLocalStore } from "./ports.js";
 
 export interface CalibrationUiOptions {
+  workspaceId?: string;
   dataDir?: string;
   host?: string;
   port?: number;
@@ -15,6 +17,8 @@ export interface CalibrationUiOptions {
 }
 
 export async function startVoiceCalibrationUi(options: CalibrationUiOptions = {}): Promise<CalibrationUiHandle> {
+  const workspaceId = options.workspaceId === undefined ? "local-default" : options.workspaceId;
+  assertWorkspaceId(workspaceId);
   const credentials = createCredentialProvider();
   const vault = findVaultRoot(process.cwd());
   const wpmPath =
@@ -29,6 +33,7 @@ export async function startVoiceCalibrationUi(options: CalibrationUiOptions = {}
   });
   return startCalibrationUi({
     application,
+    workspaceId,
     host: options.host,
     port: options.port ?? 0,
     allowNetwork: options.allowNetwork,

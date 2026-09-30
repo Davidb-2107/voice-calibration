@@ -1,12 +1,15 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { deepStrictEqual, rejects, strictEqual, match, throws } from "node:assert";
 
 import { createCalibrationApplication } from "../dist/calibration/application.js";
-import { startCalibrationUi } from "../dist/calibration/http-server.js";
+import { createCalibrationServer, startCalibrationUi } from "../dist/calibration/http-server.js";
+import { startVoiceCalibrationUi } from "../dist/calibration/entrypoint.js";
 import { createLocalStore } from "../dist/calibration/ports.js";
+import { createCalibrationBridge } from "../dist/calibration/bridge.js";
+import { createCredentialProvider } from "../dist/calibration/credentials.js";
 
 const input = {
   workspaceId: "local-default",
@@ -23,10 +26,110 @@ const input = {
   postproc: "cut",
 };
 
+test("invalid workspace is rejected before application IO or server start", async () => {
+  const touch = () => { throw new Error("unexpected IO"); };
+  const repositories = {
+    corpus: new Proxy({}, { get: () => touch }),
+    runs: new Proxy({}, { get: () => touch }),
+    profiles: new Proxy({}, { get: () => touch }),
+    artifacts: new Proxy({}, { get: () => touch }),
+  };
+  const app = makeApplication({ repositories, bridge: fakeBridge(), canonical: fakeCanonicalProfilePort() });
+  await rejects(app.getBootstrap("WORKSPACE-A"), /invalid workspaceId/);
+  await rejects(app.getCorpus("WORKSPACE-A"), /invalid workspaceId/);
+  await rejects(app.getDraft("WORKSPACE-A"), /invalid workspaceId/);
+  await rejects(app.publishCorpusVersion("WORKSPACE-A", 0), /invalid workspaceId/);
+  await rejects(app.listVoiceProfiles("WORKSPACE-A"), /invalid workspaceId/);
+  await rejects(app.prepareDryRun({ ...input, workspaceId: "WORKSPACE-A" }), /invalid workspaceId/);
+  await rejects(app.saveDraft("WORKSPACE-A", { workspaceId: "WORKSPACE-A", items: [] }, 0), /invalid workspaceId/);
+  await rejects(app.saveDraft("workspace-a", { workspaceId: "WORKSPACE-A", items: [] }, 0), /invalid workspaceId/);
+  await rejects(startCalibrationUi({ application: app, workspaceId: "WORKSPACE-A" }), /invalid workspaceId/);
+  throws(() => createCalibrationServer({ application: app, workspaceId: "WORKSPACE-A" }), /invalid workspaceId/);
+});
+
+test("foreign MCP publication never verifies or saves a local profile", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "workspace-publication-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const repositories = createLocalStore(root);
+  await publishCorpus(repositories, "workspace-a");
+  const seed = makeApplication({ repositories, bridge: fakeBridge(), canonical: fakeCanonicalProfilePort() });
+  const run = await seed.prepareDryRun({ ...input, workspaceId: "workspace-a" });
+  await seed.approve("workspace-a", run.id, { requestDigest: run.requestDigest });
+  await seed.execute("workspace-a", run.id);
+  const calls = [];
+  const transport = {
+    async schema() { return { type: "object" }; },
+    async callTool(name) {
+      calls.push(name);
+      return { emitted: true, stderr: "", response: {
+        run_id: run.id, workspace_id: "workspace-b", revision: 3, status: "succeeded",
+        context: {}, request: {}, request_digest: "v1:sha256:test", proposal: {}, approval: null,
+        result: { publication: { status: "published", canonical_ref: "python://wpm", wpm: 148 } },
+        created_at: run.createdAt, updated_at: run.updatedAt,
+      } };
+    },
+    async close() {},
+  };
+  const bridge = createCalibrationBridge({ transport, credentials: createCredentialProvider({
+    env: { ELEVENLABS_API_KEY: "test-secret" },
+  }) });
+  const canonical = fakeCanonicalProfilePort();
+  const app = makeApplication({ repositories, bridge, canonical });
+  const before = snapshotFiles(root);
+  await rejects(app.publishProfile("workspace-a", run.id), /calibration core workspace mismatch/);
+  deepStrictEqual(calls, ["publish_calibration"]);
+  strictEqual(canonical.calls.length, 0);
+  strictEqual((await repositories.profiles.list("workspace-a")).length, 0);
+  deepStrictEqual(snapshotFiles(root), before);
+});
+
+test("server rejects explicit null workspace without starting a listener", () => {
+  throws(() => createCalibrationServer({ application: {}, workspaceId: null }), /invalid workspaceId/);
+});
+
+test("startup wrappers reject null before credentials, application IO or listener creation", async () => {
+  const application = new Proxy({}, { get() { throw new Error("unexpected application IO"); } });
+  await rejects(startCalibrationUi({ application, workspaceId: null, host: "0.0.0.0" }), /invalid workspaceId/);
+  await rejects(startVoiceCalibrationUi({ workspaceId: null, host: "0.0.0.0" }), /invalid workspaceId/);
+});
+
+test("omitted and undefined startup workspace preserve local-default", async (t) => {
+  const seen = [];
+  const application = { async getBootstrap(workspaceId) { seen.push(workspaceId); return {}; }, async close() {} };
+  for (const supplied of [{}, { workspaceId: undefined }]) {
+    const server = createCalibrationServer({ application, ...supplied });
+    strictEqual(server.listening, false);
+    const ui = await startCalibrationUi({ application, ...supplied });
+    t.after(() => ui.close());
+    strictEqual((await fetch(`${ui.url}/api/v1/bootstrap`)).status, 200);
+  }
+  deepStrictEqual(seen, ["local-default", "local-default"]);
+});
+
+test("launcher rejects invalid workspace before creating credentials", async () => {
+  await rejects(startVoiceCalibrationUi({ workspaceId: "WORKSPACE-A" }), /invalid workspaceId/);
+});
+
+test("HTTP returns invalid_workspace_id before application IO", async (t) => {
+  const application = { getBootstrap() { throw new Error("unexpected IO"); }, async close() {} };
+  const ui = await startCalibrationUi({ application, host: "127.0.0.1", port: 0 });
+  t.after(() => ui.close());
+  const response = await fetch(`${ui.url}/api/v1/bootstrap?workspaceId=WORKSPACE-A`);
+  strictEqual(response.status, 400);
+  deepStrictEqual(await response.json(), { error: { code: "invalid_workspace_id", message: "invalid workspaceId" } });
+});
+
 export function memoryRepositories() {
-  let activeVersion = null;
-  const draft = { workspaceId: "local-default", revision: 0, items: [] };
-  const versions = [];
+  const corpusByWorkspace = new Map();
+  function corpusState(workspaceId) {
+    let state = corpusByWorkspace.get(workspaceId);
+    if (!state) {
+      state = { draft: { workspaceId, revision: 0, items: [] }, activeVersion: null, versions: [] };
+      corpusByWorkspace.set(workspaceId, state);
+    }
+    return state;
+  }
+  const runKey = (workspaceId, id) => JSON.stringify([workspaceId, id]);
   const runs = new Map();
   const profiles = [];
   const artifacts = new Map();
@@ -34,8 +137,9 @@ export function memoryRepositories() {
 
   return {
     corpus: {
-      async getDraft() { return structuredClone(draft); },
+      async getDraft(workspaceId) { return structuredClone(corpusState(workspaceId).draft); },
       async saveDraft(workspaceId, next, expectedRevision) {
+        const { draft } = corpusState(workspaceId);
         if (expectedRevision !== draft.revision) throw new Error("revision conflict");
         draft.workspaceId = workspaceId;
         draft.revision += 1;
@@ -43,6 +147,8 @@ export function memoryRepositories() {
         return structuredClone(draft);
       },
       async publishDraft(workspaceId, expectedRevision) {
+        const state = corpusState(workspaceId);
+        const { draft, versions, activeVersion } = state;
         if (expectedRevision !== draft.revision) throw new Error("revision conflict");
         const version = {
           id: `version-${versionNumber++}`,
@@ -54,38 +160,39 @@ export function memoryRepositories() {
           publishedAt: "2026-09-02T10:00:00.000Z",
         };
         if (activeVersion) activeVersion.status = "superseded";
-        activeVersion = version;
+        state.activeVersion = version;
         versions.push(version);
         return structuredClone(version);
       },
-      async getActiveVersion() { return activeVersion ? structuredClone(activeVersion) : null; },
-      async listVersions() { return versions.map((version) => structuredClone(version)); },
+      async getActiveVersion(workspaceId) { return structuredClone(corpusState(workspaceId).activeVersion); },
+      async listVersions(workspaceId) { return structuredClone(corpusState(workspaceId).versions); },
     },
     runs: {
-      async create(run) { runs.set(run.id, structuredClone(run)); },
-      async get(id) { return runs.has(id) ? structuredClone(runs.get(id)) : null; },
-      async save(run) { runs.set(run.id, structuredClone(run)); },
-      async list() { return [...runs.values()].map((run) => structuredClone(run)); },
-      async recoverRunning(runId, recoveredAt) {
-        const run = runs.get(runId);
+      async create(run) { runs.set(runKey(run.workspaceId, run.id), structuredClone(run)); },
+      async get(workspaceId, id) { return structuredClone(runs.get(runKey(workspaceId, id)) ?? null); },
+      async save(run) { runs.set(runKey(run.workspaceId, run.id), structuredClone(run)); },
+      async list(workspaceId) { return [...runs.values()].filter((run) => run.workspaceId === workspaceId).map((run) => structuredClone(run)); },
+      async recoverRunning(workspaceId, runId, recoveredAt) {
+        const run = runs.get(runKey(workspaceId, runId));
         if (!run) return null;
         if (run.status !== "running") return structuredClone(run);
         const recovered = { ...run, status: "execution_unknown", updatedAt: recoveredAt };
-        runs.set(runId, structuredClone(recovered));
+        runs.set(runKey(workspaceId, runId), structuredClone(recovered));
         return structuredClone(recovered);
       },
     },
     profiles: {
-      async list() { return profiles.map((profile) => structuredClone(profile)); },
+      async list(workspaceId) { return profiles.filter((profile) => profile.workspaceId === workspaceId).map((profile) => structuredClone(profile)); },
       async publish(profile) { profiles.push(structuredClone(profile)); },
     },
     artifacts: {
-      async put(runId, name, bytes) {
-        const ref = `artifact://${runId}/${name}`;
+      async put(workspaceId, runId, name, bytes) {
+        const ref = `artifact://${workspaceId}/${runId}/${name}`;
         artifacts.set(ref, new Uint8Array(bytes));
         return ref;
       },
-      async get(ref) {
+      async get(workspaceId, ref) {
+        if (!ref.startsWith(`artifact://${workspaceId}/`)) throw new Error("invalid artifact reference");
         if (!artifacts.has(ref)) throw new Error("artifact not found");
         return new Uint8Array(artifacts.get(ref));
       },
@@ -128,12 +235,12 @@ export function fakeBridge(options = {}) {
   };
 }
 
-function coreGateBridge() {
+function coreGateBridge(workspaceId = "local-default") {
   const state = { calls: [], current: null };
   const schema = { type: "object", additionalProperties: false, properties: {} };
   const makeRecord = (request, status, requestDigest, approval = null, result = null) => ({
     runId: "core-run-1",
-    workspaceId: "local-default",
+    workspaceId,
     revision: status === "dry_run_ready" ? 0 : status === "approved" ? 1 : 2,
     status,
     context: {
@@ -156,6 +263,7 @@ function coreGateBridge() {
     state,
     async getSchema() { return schema; },
     async propose(inputValue) {
+      strictEqual(inputValue.workspaceId, workspaceId);
       state.calls.push({ operation: "propose", input: structuredClone(inputValue) });
       state.current = makeRecord(inputValue.request, "dry_run_ready", "v1:sha256:core-request");
       return {
@@ -164,12 +272,14 @@ function coreGateBridge() {
         raw: { status: "dry_run_success", requests_planned: 3 },
         status: state.current.status,
         runId: state.current.runId,
+        workspaceId,
         requestDigest: state.current.requestDigest,
         proposal: state.current.proposal,
         approval: null,
       };
     },
     async approve(inputValue) {
+      strictEqual(inputValue.workspaceId, workspaceId);
       state.calls.push({ operation: "approve", input: structuredClone(inputValue) });
       state.current = makeRecord(
         state.current.requestSnapshot,
@@ -179,10 +289,12 @@ function coreGateBridge() {
       );
       return state.current;
     },
-    async getRun() {
+    async getRun(inputValue) {
+      strictEqual(inputValue.workspaceId, workspaceId);
       return state.current;
     },
     async execute(inputValue) {
+      strictEqual(inputValue.workspaceId, workspaceId);
       state.calls.push({ operation: "execute", input: structuredClone(inputValue) });
       state.current = {
         ...state.current,
@@ -198,7 +310,7 @@ function coreGateBridge() {
         coreRun: state.current,
       };
     },
-    async reconcile() { return state.current; },
+    async reconcile(inputValue) { strictEqual(inputValue.workspaceId, workspaceId); return state.current; },
   };
 }
 
@@ -219,15 +331,156 @@ export function makeApplication({ repositories, bridge, canonical, clock, creden
   return createCalibrationApplication({ repositories, bridge, canonical, clock, credentials, voiceDirectory });
 }
 
-async function publishCorpus(repositories) {
-  const draft = await repositories.corpus.getDraft("local-default");
+async function publishCorpus(repositories, workspaceId = "local-default") {
+  const draft = await repositories.corpus.getDraft(workspaceId);
   const saved = await repositories.corpus.saveDraft(
-    "local-default",
+    workspaceId,
     { ...draft, items: [{ id: "one", order: 1, text: "Bonjour." }, { id: "two", order: 0, text: "Le monde." }] },
     draft.revision,
   );
-  return repositories.corpus.publishDraft("local-default", saved.revision);
+  return repositories.corpus.publishDraft(workspaceId, saved.revision);
 }
+
+function snapshotFiles(root) {
+  const snapshot = {};
+  function visit(directory) {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) visit(path);
+      else snapshot[path] = readFileSync(path, "base64");
+    }
+  }
+  visit(root);
+  return snapshot;
+}
+
+test("foreign first request does not recover local runs", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "workspace-restart-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const repositories = createLocalStore(root);
+  const seed = makeApplication({ repositories, bridge: fakeBridge(), canonical: fakeCanonicalProfilePort() });
+  for (const workspaceId of ["workspace-a", "workspace-b"]) await publishCorpus(repositories, workspaceId);
+  const runA = await seed.prepareDryRun({ ...input, workspaceId: "workspace-a" });
+  const approved = await seed.approve("workspace-a", runA.id, { requestDigest: runA.requestDigest });
+  await repositories.runs.save({ ...approved, status: "running", approval: {
+    ...approved.approval, consumedAt: "2026-09-02T10:00:00Z",
+  } });
+  const runB = await seed.prepareDryRun({ ...input, workspaceId: "workspace-b" });
+  const bridge = fakeBridge();
+  const canonical = fakeCanonicalProfilePort();
+  const app = makeApplication({ repositories: createLocalStore(root), bridge, canonical });
+  const ui = await startCalibrationUi({ application: app, workspaceId: "workspace-a" });
+  t.after(() => ui.close());
+  const before = snapshotFiles(root);
+  const headers = { "content-type": "application/json", "x-calibration-nonce": app.getSessionNonce() };
+  const requests = [
+    ["GET", `/calibration-runs/${runB.id}`, undefined],
+    ["POST", `/calibration-runs/${runB.id}/approve`, { requestDigest: runB.requestDigest }],
+    ["POST", `/calibration-runs/${runB.id}/execute`, {}],
+    ["POST", `/calibration-runs/${runB.id}/reconcile`, {}],
+    ["POST", "/voice-profiles", { runId: runB.id }],
+  ];
+  for (const [method, path, value] of requests) {
+    const response = await fetch(`${ui.url}/api/v1${path}`, {
+      method, headers, ...(value === undefined ? {} : { body: JSON.stringify(value) }),
+    });
+    strictEqual(response.status, 404);
+    deepStrictEqual(snapshotFiles(root), before);
+  }
+  strictEqual(bridge.state.dryRuns.length, 0);
+  strictEqual(bridge.state.executions.length, 0);
+  strictEqual(canonical.calls.length, 0);
+  strictEqual(await app.getRun("workspace-a", runB.id), null);
+  strictEqual(await app.getReport("workspace-a", runB.id), null);
+  for (const operation of [
+    () => app.approve("workspace-a", runB.id, { requestDigest: runB.requestDigest }),
+    () => app.execute("workspace-a", runB.id),
+    () => app.reconcile("workspace-a", runB.id),
+    () => app.publishProfile("workspace-a", runB.id),
+  ]) {
+    await rejects(operation(), { name: "NotFoundError" });
+    deepStrictEqual(snapshotFiles(root), before);
+  }
+  for (const operation of [
+    () => app.getRun("WORKSPACE-A", runB.id),
+    () => app.getReport("WORKSPACE-A", runB.id),
+    () => app.approve("WORKSPACE-A", runB.id, { requestDigest: runB.requestDigest }),
+    () => app.execute("WORKSPACE-A", runB.id),
+    () => app.reconcile("WORKSPACE-A", runB.id),
+    () => app.publishProfile("WORKSPACE-A", runB.id),
+  ]) {
+    await rejects(operation(), /invalid workspaceId/);
+    deepStrictEqual(snapshotFiles(root), before);
+  }
+  const badRepositories = memoryRepositories();
+  badRepositories.runs.get = async () => structuredClone(runB);
+  badRepositories.runs.list = async () => { throw new Error("unexpected recovery"); };
+  const badApp = makeApplication({ repositories: badRepositories, bridge, canonical });
+  strictEqual(await badApp.getRun("workspace-a", runB.id), null);
+  strictEqual(await badApp.getReport("workspace-a", runB.id), null);
+  const allowed = await fetch(`${ui.url}/api/v1/calibration-runs/${runA.id}`);
+  strictEqual(allowed.status, 200);
+  strictEqual((await allowed.json()).status, "execution_unknown");
+});
+
+test("HTTP checks every supplied workspace identity", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "workspace-http-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const bridge = fakeBridge();
+  const app = makeApplication({ repositories: createLocalStore(root), bridge, canonical: fakeCanonicalProfilePort() });
+  const ui = await startCalibrationUi({ application: app, workspaceId: "workspace-a" });
+  t.after(() => ui.close());
+  const headers = { "content-type": "application/json", "x-calibration-nonce": app.getSessionNonce() };
+  const before = snapshotFiles(root);
+  const cases = [
+    ["GET", "/bootstrap?workspaceId=WORKSPACE-A", undefined, "invalid_workspace_id"],
+    ["GET", "/bootstrap?workspaceId=workspace-b", undefined, "workspace_mismatch"],
+    ["GET", "/bootstrap?workspaceId=workspace-a&workspaceId=workspace-b", undefined, "workspace_mismatch"],
+    ["POST", "/calibration-runs/dry-run", { workspaceId: "workspace-b" }, "workspace_mismatch"],
+    ["POST", "/calibration-runs/dry-run", { input: { workspaceId: "workspace-b" } }, "workspace_mismatch"],
+    ["PUT", "/corpus/draft", { draft: { workspaceId: "workspace-b" } }, "workspace_mismatch"],
+    ["POST", "/voice-profiles", { workspaceId: null }, "invalid_workspace_id"],
+  ];
+  for (const [method, path, value, code] of cases) {
+    const response = await fetch(`${ui.url}/api/v1${path}`, {
+      method, headers: { ...headers, "if-match": 'W/"corpus-draft-0"' },
+      ...(value === undefined ? {} : { body: JSON.stringify(value) }),
+    });
+    strictEqual(response.status, 400);
+    strictEqual((await response.json()).error.code, code);
+    deepStrictEqual(snapshotFiles(root), before);
+  }
+  for (const action of ["approve", "execute", "reconcile"]) {
+    const response = await fetch(`${ui.url}/api/v1/calibration-runs/foreign/${action}`, {
+      method: "POST", headers, body: JSON.stringify({ workspaceId: "workspace-b" }),
+    });
+    strictEqual(response.status, 400);
+    strictEqual((await response.json()).error.code, "workspace_mismatch");
+    deepStrictEqual(snapshotFiles(root), before);
+  }
+  const shadowed = await fetch(`${ui.url}/api/v1/calibration-runs/dry-run?workspaceId=workspace-a`, {
+    method: "POST", headers,
+    body: JSON.stringify({ workspaceId: "workspace-a", input: { workspaceId: "workspace-b" } }),
+  });
+  strictEqual(shadowed.status, 400);
+  strictEqual((await shadowed.json()).error.code, "workspace_mismatch");
+  deepStrictEqual(snapshotFiles(root), before);
+  strictEqual((await fetch(`${ui.url}/api/v1/bootstrap?workspaceId=workspace-a`)).status, 200);
+  strictEqual(bridge.state.dryRuns.length, 0);
+  strictEqual(bridge.state.executions.length, 0);
+});
+
+test("server retains its workspace after caller mutates options", async (t) => {
+  const seen = [];
+  const application = { async getBootstrap(workspaceId) { seen.push(workspaceId); return {}; } };
+  const options = { application, workspaceId: "workspace-a" };
+  const server = createCalibrationServer(options);
+  options.workspaceId = "workspace-b";
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  strictEqual((await fetch(`http://127.0.0.1:${server.address().port}/api/v1/bootstrap`)).status, 200);
+  deepStrictEqual(seen, ["workspace-a"]);
+});
 
 test("the application requires a persistent run listing repository", () => {
   const repositories = memoryRepositories();
@@ -291,10 +544,10 @@ test("persists the accepted proposal preview across an application restart", asy
       bridge: fakeBridge(),
       canonical: fakeCanonicalProfilePort(),
     });
-    const persisted = await restarted.getRun(run.id);
+    const persisted = await restarted.getRun("local-default", run.id);
     deepStrictEqual(persisted?.proposal, run.proposal);
     strictEqual(persisted?.status, "dry_run_ready");
-    await rejects(restarted.execute(run.id), /approval required/);
+    await rejects(restarted.execute("local-default", run.id), /approval required/);
   } finally {
     rmSync(dataDir, { recursive: true, force: true });
   }
@@ -305,7 +558,7 @@ test("bootstrap recovers persisted running runs as execution_unknown", async () 
   await publishCorpus(repositories);
   const app = makeApplication({ repositories, bridge: fakeBridge(), canonical: fakeCanonicalProfilePort() });
   const run = await app.prepareDryRun(input);
-  const approved = await app.approve(run.id, { requestDigest: run.requestDigest });
+  const approved = await app.approve("local-default", run.id, { requestDigest: run.requestDigest });
   await repositories.runs.save({
     ...approved,
     status: "running",
@@ -315,7 +568,7 @@ test("bootstrap recovers persisted running runs as execution_unknown", async () 
   const restarted = makeApplication({ repositories, bridge: fakeBridge(), canonical: fakeCanonicalProfilePort() });
   const bootstrap = await restarted.getBootstrap();
   strictEqual(bootstrap.recentRuns.find((candidate) => candidate.id === run.id)?.status, "execution_unknown");
-  strictEqual((await repositories.runs.get(run.id)).status, "execution_unknown");
+  strictEqual((await repositories.runs.get("local-default", run.id)).status, "execution_unknown");
 });
 
 test("persisted error reports redact the exact provider credential", async () => {
@@ -334,9 +587,9 @@ test("persisted error reports redact the exact provider credential", async () =>
     credentials,
   });
   const run = await app.prepareDryRun(input);
-  await app.approve(run.id, { requestDigest: run.requestDigest });
-  await app.execute(run.id);
-  const report = await app.getReport(run.id);
+  await app.approve("local-default", run.id, { requestDigest: run.requestDigest });
+  await app.execute("local-default", run.id);
+  const report = await app.getReport("local-default", run.id);
   strictEqual(JSON.stringify(report).includes(secret), false);
   strictEqual(report.error.message.includes("[REDACTED]"), true);
 });
@@ -358,8 +611,8 @@ test("HTTP responses redact sensitive values inside JSON-shaped strings", async 
     canonical: fakeCanonicalProfilePort(),
   });
   const run = await app.prepareDryRun(input);
-  await app.approve(run.id, { requestDigest: run.requestDigest });
-  await app.execute(run.id);
+  await app.approve("local-default", run.id, { requestDigest: run.requestDigest });
+  await app.execute("local-default", run.id);
   const ui = await startCalibrationUi({ application: app, host: "127.0.0.1", port: 0 });
   t.after(async () => ui.close());
 
@@ -427,11 +680,11 @@ test("the application projects the persistent core gate and never runs a second 
   strictEqual(run.requestDigest, "v1:sha256:core-request");
   strictEqual(bridge.state.calls[0].operation, "propose");
 
-  const approved = await app.approve(run.id, { requestDigest: run.requestDigest });
+  const approved = await app.approve("local-default", run.id, { requestDigest: run.requestDigest });
   strictEqual(approved.status, "approved");
   strictEqual(bridge.state.calls[1].operation, "approve");
 
-  const executed = await app.execute(run.id);
+  const executed = await app.execute("local-default", run.id);
   strictEqual(executed.status, "succeeded");
   strictEqual(bridge.state.calls[2].operation, "execute");
   strictEqual(bridge.state.calls[2].input.coreRunId, "core-run-1");
@@ -452,19 +705,19 @@ test("the application preserves the resolved snapshot through approval, executio
   deepStrictEqual(run.request.params.text_source, { kind: "inline", text: "Le monde.\n\nBonjour." });
   match(run.requestDigest, /^[a-f0-9]{64}$/);
   strictEqual(bridge.state.dryRuns.length, 1);
-  await rejects(app.approve(run.id, { requestDigest: "wrong-digest" }), /request digest mismatch/);
+  await rejects(app.approve("local-default", run.id, { requestDigest: "wrong-digest" }), /request digest mismatch/);
 
-  const approved = await app.approve(run.id, { requestDigest: run.requestDigest });
+  const approved = await app.approve("local-default", run.id, { requestDigest: run.requestDigest });
   strictEqual(approved.status, "approved");
   strictEqual(approved.approval.expiresAt, "2026-09-02T10:15:00.000Z");
 
-  const result = await app.execute(run.id);
+  const result = await app.execute("local-default", run.id);
   strictEqual(result.status, "succeeded");
   strictEqual(result.approval.consumedAt, "2026-09-02T10:00:00.000Z");
   strictEqual(bridge.state.executions.length, 1);
   deepStrictEqual(bridge.state.executions[0].snapshot, run.request);
   strictEqual((await app.listVoiceProfiles()).length, 0);
-  const profile = await app.publishProfile(run.id);
+  const profile = await app.publishProfile("local-default", run.id);
   strictEqual(profile.wpmSnapshot, 148);
   strictEqual(profile.canonicalRef, "python://voice_wpm/voice-1");
   strictEqual((await app.listVoiceProfiles("local-default")).length, 1);
@@ -484,10 +737,10 @@ test("core publication commits the canonical corpus before the local profile", a
   const canonical = fakeCanonicalProfilePort();
   const app = makeApplication({ repositories, bridge, canonical });
   const run = await app.prepareDryRun(input);
-  await app.approve(run.id, { requestDigest: run.requestDigest });
-  await app.execute(run.id);
+  await app.approve("local-default", run.id, { requestDigest: run.requestDigest });
+  await app.execute("local-default", run.id);
 
-  const profile = await app.publishProfile(run.id);
+  const profile = await app.publishProfile("local-default", run.id);
 
   strictEqual(publicationCalls.length, 1);
   strictEqual(publicationCalls[0].workspaceId, "local-default");
@@ -502,12 +755,12 @@ test("execution consumes approval before a lost response and never retries execu
   const bridge = fakeBridge({ executeError: "execution_unknown" });
   const app = makeApplication({ repositories, bridge, canonical: fakeCanonicalProfilePort() });
   const run = await app.prepareDryRun(input);
-  await app.approve(run.id, { requestDigest: run.requestDigest });
-  const unknown = await app.execute(run.id);
+  await app.approve("local-default", run.id, { requestDigest: run.requestDigest });
+  const unknown = await app.execute("local-default", run.id);
   strictEqual(unknown.status, "execution_unknown");
   strictEqual(unknown.approval.consumedAt !== null, true);
   strictEqual(bridge.state.executions.length, 1);
-  await rejects(app.execute(run.id), /execution_unknown.*retry|retry.*execution_unknown/);
+  await rejects(app.execute("local-default", run.id), /execution_unknown.*retry|retry.*execution_unknown/);
   strictEqual(bridge.state.executions.length, 1);
 });
 
@@ -517,9 +770,9 @@ test("approval expires according to the injected clock", async () => {
   let now = new Date("2026-09-02T10:00:00Z");
   const app = makeApplication({ repositories, bridge: fakeBridge(), canonical: fakeCanonicalProfilePort(), clock: { now: () => now } });
   const run = await app.prepareDryRun(input);
-  await app.approve(run.id, { requestDigest: run.requestDigest });
+  await app.approve("local-default", run.id, { requestDigest: run.requestDigest });
   now = new Date("2026-09-02T10:16:00Z");
-  await rejects(app.execute(run.id), /approval expired/);
+  await rejects(app.execute("local-default", run.id), /approval expired/);
 });
 
 test("the HTTP API enforces nonce, ETag, same-origin and safe static paths", async (t) => {
