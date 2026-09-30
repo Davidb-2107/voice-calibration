@@ -1,10 +1,9 @@
 import { spawn } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
 
 import { createCalibrationApplication } from "./application.js";
 import { createCalibrationBridge, createCanonicalProfilePort } from "./bridge.js";
-import { createCredentialProvider, createVoiceDirectoryProvider } from "./credentials.js";
+import { createCredentialProvider, createVoiceDirectoryProvider, findVaultRoot } from "./credentials.js";
 import { type CalibrationUiHandle, startCalibrationUi } from "./http-server.js";
 import { createLocalStore } from "./ports.js";
 
@@ -44,22 +43,4 @@ export function openInBrowser(target: string): void {
         ? ["open", [target]]
         : ["xdg-open", [target]];
   spawn(command, args, { detached: true, stdio: "ignore" }).unref();
-}
-
-function findVaultRoot(startDir: string): string | null {
-  let directory = resolve(startDir);
-  for (;;) {
-    if (isDirectory(join(directory, "Projects")) && isDirectory(join(directory, "Shared"))) return directory;
-    const parent = dirname(directory);
-    if (parent === directory) return null;
-    directory = parent;
-  }
-}
-
-function isDirectory(path: string): boolean {
-  try {
-    return existsSync(path) && statSync(path).isDirectory();
-  } catch {
-    return false;
-  }
 }
