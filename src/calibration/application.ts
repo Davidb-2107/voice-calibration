@@ -298,8 +298,10 @@ export class CalibrationApplication {
   private readonly sessionNonce: string;
 
   constructor(options: CalibrationApplicationOptions) {
-    if (options.configurationIdentity !== undefined &&
-      !/^v1:hmac-sha256:[a-f0-9]{64}$/u.test(options.configurationIdentity)) {
+    if (
+      options.configurationIdentity !== undefined &&
+      !/^v1:hmac-sha256:[a-f0-9]{64}$/u.test(options.configurationIdentity)
+    ) {
       throw new TypeError("invalid configurationIdentity");
     }
     this.configurationIdentity = options.configurationIdentity;
@@ -818,54 +820,54 @@ export class CalibrationApplication {
   async publishProfile(workspaceId: string, runId: string): Promise<VoiceProfile> {
     assertWorkspaceId(workspaceId);
     return this.withRunLock(workspaceId, runId, async () => {
-    const run = await this.getRunOrThrow(workspaceId, runId);
-    if (run.status !== "succeeded") throw new ConflictError("profile publication requires a successful run");
-    if (run.request.postproc !== "cut")
-      throw new ContractValidationError('profile publication requires postproc="cut" for the canonical WPM source');
-    const report = await this.loadReport(run);
-    const wpm = wpmFromReport(report);
-    if (wpm === null) throw new ContractValidationError("successful calibration result has no WPM");
-    let publishedWpm = wpm;
-    let canonical: { canonicalRef: string };
-    try {
-      if (this.bridge.publish) {
-        const publication = await this.bridge.publish({ workspaceId: run.workspaceId, runId: run.id });
-        publishedWpm = publication.wpm;
-        canonical = await this.canonical.ensurePublished({
-          voiceRef: run.request.voiceRef,
-          wpm: publishedWpm,
-          runId: run.id,
-          corpusVersionId: run.request.corpusVersionId,
-          language: run.request.params.language === "en" ? "en" : "fr",
-        });
-      } else {
-        canonical = await this.canonical.ensurePublished({
-          voiceRef: run.request.voiceRef,
-          wpm,
-          runId: run.id,
-          corpusVersionId: run.request.corpusVersionId,
-          language: run.request.params.language === "en" ? "en" : "fr",
-        });
+      const run = await this.getRunOrThrow(workspaceId, runId);
+      if (run.status !== "succeeded") throw new ConflictError("profile publication requires a successful run");
+      if (run.request.postproc !== "cut")
+        throw new ContractValidationError('profile publication requires postproc="cut" for the canonical WPM source');
+      const report = await this.loadReport(run);
+      const wpm = wpmFromReport(report);
+      if (wpm === null) throw new ContractValidationError("successful calibration result has no WPM");
+      let publishedWpm = wpm;
+      let canonical: { canonicalRef: string };
+      try {
+        if (this.bridge.publish) {
+          const publication = await this.bridge.publish({ workspaceId: run.workspaceId, runId: run.id });
+          publishedWpm = publication.wpm;
+          canonical = await this.canonical.ensurePublished({
+            voiceRef: run.request.voiceRef,
+            wpm: publishedWpm,
+            runId: run.id,
+            corpusVersionId: run.request.corpusVersionId,
+            language: run.request.params.language === "en" ? "en" : "fr",
+          });
+        } else {
+          canonical = await this.canonical.ensurePublished({
+            voiceRef: run.request.voiceRef,
+            wpm,
+            runId: run.id,
+            corpusVersionId: run.request.corpusVersionId,
+            language: run.request.params.language === "en" ? "en" : "fr",
+          });
+        }
+      } catch (error) {
+        const message = errorMessage(error);
+        if (isUnavailableMessage(message)) throw new UnavailableError(message);
+        throw new ContractValidationError(message);
       }
-    } catch (error) {
-      const message = errorMessage(error);
-      if (isUnavailableMessage(message)) throw new UnavailableError(message);
-      throw new ContractValidationError(message);
-    }
-    const profile: VoiceProfile = {
-      id: randomUUID(),
-      workspaceId: run.workspaceId,
-      voiceRef: run.request.voiceRef,
-      wpmSnapshot: publishedWpm,
-      wpmAuthority: "python-voice-wpm",
-      canonicalRef: canonical.canonicalRef,
-      sourceRunId: run.id,
-      corpusVersionId: run.request.corpusVersionId,
-      reportId: run.reportId as string,
-      publishedAt: nowIso(this.clock),
-    };
-    await this.repositories.profiles.publish(profile);
-    return profile;
+      const profile: VoiceProfile = {
+        id: randomUUID(),
+        workspaceId: run.workspaceId,
+        voiceRef: run.request.voiceRef,
+        wpmSnapshot: publishedWpm,
+        wpmAuthority: "python-voice-wpm",
+        canonicalRef: canonical.canonicalRef,
+        sourceRunId: run.id,
+        corpusVersionId: run.request.corpusVersionId,
+        reportId: run.reportId as string,
+        publishedAt: nowIso(this.clock),
+      };
+      await this.repositories.profiles.publish(profile);
+      return profile;
     });
   }
 

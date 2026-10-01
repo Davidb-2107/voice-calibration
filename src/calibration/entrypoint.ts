@@ -97,8 +97,8 @@ export async function startVoiceCalibrationUi(options: CalibrationUiOptions = {}
     const implicitPath = environment.VOICE_WPM_PATH ?? historicalWpmPath;
     wpmPath = implicitPath?.trim() ? resolve(cwd, implicitPath) : undefined;
   }
-  const referenceBase = wpmPath && wpmPath === historicalWpmPath
-    ? "Shared/voice-calibration/voice_wpm.json" : undefined;
+  const referenceBase =
+    wpmPath && wpmPath === historicalWpmPath ? "Shared/voice-calibration/voice_wpm.json" : undefined;
   const language = environment.VOICE_CALIBRATION_LANGUAGE === "en" ? "en" : "fr";
   const credentials = createCredentialProvider({ env: secret === undefined ? {} : { ELEVENLABS_API_KEY: secret } });
   const configurationIdentity =
