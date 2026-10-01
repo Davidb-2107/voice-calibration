@@ -1,4 +1,4 @@
-import { mkdirSync, statSync, mkdtempSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, statSync, mkdtempSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { deepStrictEqual, rejects, strictEqual, match } from "node:assert";
@@ -27,9 +27,68 @@ const runFixture = {
   updatedAt: "2026-09-02T00:00:00.000Z",
 };
 
+test("workspaces partition every local resource", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "workspace-storage-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const store = createLocalStore(root);
+  const refs = {};
+  for (const workspaceId of ["workspace-a", "workspace-b"]) {
+    const draft = await store.corpus.getDraft(workspaceId);
+    const saved = await store.corpus.saveDraft(workspaceId, {
+      ...draft, items: [{ id: "t1", order: 0, text: workspaceId }],
+    }, draft.revision);
+    const version = await store.corpus.publishDraft(workspaceId, saved.revision);
+    const run = { ...runFixture, workspaceId, status: "approved", approval: {
+      approvedAt: "2026-09-02T10:00:00Z", expiresAt: "2026-09-02T10:15:00Z", consumedAt: null,
+    } };
+    await store.runs.create(run);
+    refs[workspaceId] = await store.artifacts.put(workspaceId, run.id, "report.json", Buffer.from(workspaceId));
+    await store.profiles.publish({
+      id: "profile-1", workspaceId, voiceRef: "voice-1", wpmSnapshot: 148,
+      wpmAuthority: "python-voice-wpm", canonicalRef: "python://wpm", sourceRunId: run.id,
+      corpusVersionId: version.id, reportId: refs[workspaceId], publishedAt: run.createdAt,
+    });
+  }
+  const reloaded = createLocalStore(root);
+  for (const workspaceId of ["workspace-a", "workspace-b"]) {
+    strictEqual((await reloaded.runs.get(workspaceId, "run-1")).workspaceId, workspaceId);
+    strictEqual((await reloaded.runs.list(workspaceId)).length, 1);
+    strictEqual((await reloaded.corpus.getActiveVersion(workspaceId)).items[0].text, workspaceId);
+    strictEqual((await reloaded.profiles.list(workspaceId))[0].workspaceId, workspaceId);
+    strictEqual(Buffer.from(await reloaded.artifacts.get(workspaceId, refs[workspaceId])).toString(), workspaceId);
+  }
+  await rejects(reloaded.artifacts.get("workspace-a", refs["workspace-b"]), /invalid artifact reference/);
+  await reloaded.runs.consumeApproval("workspace-a", "run-1", "2026-09-02T10:01:00Z");
+  await reloaded.runs.recoverRunning("workspace-a", "run-1", "2026-09-02T10:02:00Z");
+  strictEqual((await reloaded.runs.get("workspace-a", "run-1")).status, "execution_unknown");
+  strictEqual((await reloaded.runs.get("workspace-b", "run-1")).status, "approved");
+});
+
 function makeStore() {
   return createLocalStore(mkdtempSync(join(tmpdir(), "calibration-")));
 }
+
+test("noncanonical workspace is rejected before storage IO", async (t) => {
+  const parent = mkdtempSync(join(tmpdir(), "workspace-validation-"));
+  t.after(() => rmSync(parent, { recursive: true, force: true }));
+  const root = join(parent, "not-created");
+  const store = createLocalStore(root);
+  await rejects(store.corpus.getDraft("WORKSPACE-A"), /invalid workspaceId/);
+  await rejects(store.runs.create({ ...runFixture, workspaceId: "WORKSPACE-A" }), /invalid workspaceId/);
+  await rejects(store.runs.save({ ...runFixture, workspaceId: "WORKSPACE-A" }), /invalid workspaceId/);
+  await rejects(store.profiles.publish({ workspaceId: "WORKSPACE-A", id: "p" }), /invalid workspaceId/);
+  await rejects(store.runs.list("WORKSPACE-A"), /invalid workspaceId/);
+  await rejects(store.runs.get("WORKSPACE-A", "run-1"), /invalid workspaceId/);
+  await rejects(store.runs.recoverRunning("WORKSPACE-A", "run-1", runFixture.createdAt), /invalid workspaceId/);
+  await rejects(store.runs.consumeApproval("WORKSPACE-A", "run-1", runFixture.createdAt), /invalid workspaceId/);
+  await rejects(store.artifacts.put("WORKSPACE-A", "run-1", "report.json", new Uint8Array()), /invalid workspaceId/);
+  await rejects(store.artifacts.get("WORKSPACE-A", "report.json"), /invalid workspaceId/);
+  await rejects(store.corpus.publishDraft("WORKSPACE-A", 0), /invalid workspaceId/);
+  await rejects(store.corpus.saveDraft("WORKSPACE-A", { workspaceId: "WORKSPACE-A", items: [] }, 0), /invalid workspaceId/);
+  await rejects(store.corpus.saveDraft("workspace-a", { workspaceId: "WORKSPACE-A", items: [] }, 0), /invalid workspaceId/);
+  await rejects(store.corpus.saveDraft("workspace-a", { workspaceId: "workspace-b", items: [] }, 0), /draft workspace mismatch/);
+  strictEqual(existsSync(root), false);
+});
 
 test("draft save uses revision and rejects stale writers", async () => {
   const store = makeStore();
@@ -145,16 +204,23 @@ test("writes survive reload and use the expected layout", async () => {
     true,
   );
   const reloaded = createLocalStore(dataDir);
-  deepStrictEqual(await reloaded.runs.get(runFixture.id), runFixture);
+  deepStrictEqual(await reloaded.runs.get("local-default", runFixture.id), runFixture);
+  const ref = "workspaces/local-default/artifacts/run-1/report.json";
+  mkdirSync(dirname(join(dataDir, ref)), { recursive: true });
+  writeFileSync(join(dataDir, ref), JSON.stringify({ legacy: true }));
+  await store.runs.save({ ...runFixture, reportId: ref });
+  strictEqual((await reloaded.runs.get("local-default", runFixture.id)).reportId, ref);
+  deepStrictEqual(JSON.parse(Buffer.from(await reloaded.artifacts.get("local-default", ref)).toString()), { legacy: true });
+  await rejects(reloaded.artifacts.get("workspace-a", ref), /invalid artifact reference/);
 });
 
 test("artifacts round-trip and reject traversal", async () => {
   const store = makeStore();
-  const ref = await store.artifacts.put("run-1", "audio/sample.mp3", new Uint8Array([1, 2, 3]));
+  const ref = await store.artifacts.put("local-default", "run-1", "audio/sample.mp3", new Uint8Array([1, 2, 3]));
   match(ref, /^workspaces\/local-default\/artifacts\/run-1\/audio\/sample\.mp3$/);
-  deepStrictEqual([...await store.artifacts.get(ref)], [1, 2, 3]);
-  await rejects(store.artifacts.put("run-1", "../secret", new Uint8Array([1])), /invalid artifact path/);
-  await rejects(store.artifacts.get("workspaces/local-default/runs/run-1.json"), /invalid artifact reference/);
+  deepStrictEqual([...await store.artifacts.get("local-default", ref)], [1, 2, 3]);
+  await rejects(store.artifacts.put("local-default", "run-1", "../secret", new Uint8Array([1])), /invalid artifact path/);
+  await rejects(store.artifacts.get("local-default", "workspaces/local-default/runs/run-1.json"), /invalid artifact reference/);
 });
 
 test("artifact symlink checks stop at the artifact root and still reject links inside it", async () => {
@@ -166,11 +232,11 @@ test("artifact symlink checks stop at the artifact root and still reject links i
 
   const dataDir = join(parentLink, "calibration");
   const store = createLocalStore(dataDir);
-  const ref = await store.artifacts.put("run-1", "audio.mp3", new Uint8Array([7]));
-  deepStrictEqual([...await store.artifacts.get(ref)], [7]);
+  const ref = await store.artifacts.put("local-default", "run-1", "audio.mp3", new Uint8Array([7]));
+  deepStrictEqual([...await store.artifacts.get("local-default", ref)], [7]);
 
   const internalLink = join(dataDir, "workspaces", "local-default", "artifacts", "run-2");
   mkdirSync(dirname(internalLink), { recursive: true });
   symlinkSync(realParent, internalLink, linkType);
-  await rejects(store.artifacts.put("run-2", "audio.mp3", new Uint8Array([8])), /symbolic links/);
+  await rejects(store.artifacts.put("local-default", "run-2", "audio.mp3", new Uint8Array([8])), /symbolic links/);
 });

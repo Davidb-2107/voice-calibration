@@ -50,16 +50,21 @@ function ancestorDirectories(start: string): string[] {
   return result;
 }
 
+export function findVaultRoot(cwd: string, configuredVaultRoot?: string): string | undefined {
+  const isVaultRoot = (directory: string) =>
+    existsSync(join(directory, "Projects")) && existsSync(join(directory, "Shared"));
+  return (
+    ancestorDirectories(cwd).find(isVaultRoot) ??
+    [configuredVaultRoot, join(homedir(), "Documents", "ObsidianVault", "Wiki_Claude")].find(
+      (directory) => directory && isVaultRoot(directory),
+    )
+  );
+}
+
 function discoverEnvFiles(cwd: string, configuredVaultRoot?: string): string[] {
   const ancestors = ancestorDirectories(cwd);
   const projectsDirectory = ancestors.find((directory) => basename(directory) === "Projects");
-  const isVaultRoot = (directory: string) =>
-    existsSync(join(directory, "Projects")) && existsSync(join(directory, "Shared"));
-  const vaultRoot =
-    ancestors.find(isVaultRoot) ??
-    [configuredVaultRoot, join(homedir(), "Documents", "ObsidianVault", "Wiki_Claude")].find(
-      (directory) => directory && isVaultRoot(directory),
-    );
+  const vaultRoot = findVaultRoot(cwd, configuredVaultRoot);
   const resolvedProjectsDirectory = projectsDirectory ?? (vaultRoot ? join(vaultRoot, "Projects") : undefined);
   if (!resolvedProjectsDirectory)
     return ancestors.flatMap((directory) => [

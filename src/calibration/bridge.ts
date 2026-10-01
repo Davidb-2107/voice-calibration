@@ -1,7 +1,7 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 
-import type { ResolvedCalibrationRequest } from "./domain.js";
+import { assertWorkspaceId, type ResolvedCalibrationRequest } from "./domain.js";
 
 export interface ConfigStatus {
   configured: boolean;
@@ -438,6 +438,13 @@ function parseCoreRun(value: unknown): CoreRunRecord {
   };
 }
 
+function parseScopedCoreRun(value: unknown, workspaceId: string): CoreRunRecord {
+  assertWorkspaceId(workspaceId);
+  const run = parseCoreRun(value);
+  if (run.workspaceId !== workspaceId) throw new Error("calibration core workspace mismatch");
+  return run;
+}
+
 function coreExecutionResult(run: CoreRunRecord): ExecutionResult {
   const raw = resultObject(run.result);
   if (run.status === "execution_unknown") {
@@ -564,6 +571,7 @@ export function createCalibrationBridge(options: {
       }
     },
     async propose(input) {
+      assertWorkspaceId(input.workspaceId);
       const result = await invokeTool("propose_calibration", {
         workspace_id: input.workspaceId,
         ...makeGateRequest(input.request),
@@ -577,7 +585,7 @@ export function createCalibrationBridge(options: {
         throw new Error(String(safeError.message ?? "MCP tools/call failed"));
       }
       const safeResponse = redact(result.response, result.secret);
-      const coreRun = parseCoreRun(safeResponse);
+      const coreRun = parseScopedCoreRun(safeResponse, input.workspaceId);
       const proposal = resultObject(coreRun.proposal);
       return {
         accepted: coreRun.status === "dry_run_ready",
@@ -592,6 +600,7 @@ export function createCalibrationBridge(options: {
       };
     },
     async approve(input) {
+      assertWorkspaceId(input.workspaceId);
       const result = await invokeTool("approve_calibration", {
         workspace_id: input.workspaceId,
         run_id: input.runId,
@@ -601,9 +610,10 @@ export function createCalibrationBridge(options: {
         const safeError = redact(result.remoteError, result.secret) as Record<string, unknown>;
         throw new Error(String(safeError.message ?? "MCP tools/call failed"));
       }
-      return parseCoreRun(redact(result.response, result.secret));
+      return parseScopedCoreRun(redact(result.response, result.secret), input.workspaceId);
     },
     async getRun(input) {
+      assertWorkspaceId(input.workspaceId);
       const result = await invokeTool("get_calibration_run", {
         workspace_id: input.workspaceId,
         run_id: input.runId,
@@ -612,9 +622,10 @@ export function createCalibrationBridge(options: {
         const safeError = redact(result.remoteError, result.secret) as Record<string, unknown>;
         throw new Error(String(safeError.message ?? "MCP tools/call failed"));
       }
-      return parseCoreRun(redact(result.response, result.secret));
+      return parseScopedCoreRun(redact(result.response, result.secret), input.workspaceId);
     },
     async publish(input) {
+      assertWorkspaceId(input.workspaceId);
       const result = await invokeTool("publish_calibration", {
         workspace_id: input.workspaceId,
         run_id: input.runId,
@@ -624,7 +635,7 @@ export function createCalibrationBridge(options: {
         throw new Error(String(safeError.message ?? "MCP tools/call failed"));
       }
       const safeResponse = redact(result.response, result.secret);
-      const run = parseCoreRun(safeResponse);
+      const run = parseScopedCoreRun(safeResponse, input.workspaceId);
       const publication = resultObject(run.result).publication;
       const publicationObject = resultObject(publication);
       if (
@@ -642,6 +653,7 @@ export function createCalibrationBridge(options: {
       };
     },
     async execute(input) {
+      if (input.workspaceId !== undefined) assertWorkspaceId(input.workspaceId);
       if (input.workspaceId && input.coreRunId) {
         const result = await invokeTool("execute_calibration", {
           workspace_id: input.workspaceId,
@@ -651,7 +663,7 @@ export function createCalibrationBridge(options: {
           const safeError = redact(result.remoteError, result.secret) as Record<string, unknown>;
           throw new Error(String(safeError.message ?? "MCP tools/call failed"));
         }
-        return coreExecutionResult(parseCoreRun(redact(result.response, result.secret)));
+        return coreExecutionResult(parseScopedCoreRun(redact(result.response, result.secret), input.workspaceId));
       }
       try {
         const result = await invokeTool("calibrate_voice", makeRequest(input.snapshot, false));
@@ -692,6 +704,7 @@ export function createCalibrationBridge(options: {
       }
     },
     async reconcile(input) {
+      if (input.workspaceId !== undefined) assertWorkspaceId(input.workspaceId);
       if (input.workspaceId && input.coreRunId) {
         const result = await invokeTool("reconcile_calibration", {
           workspace_id: input.workspaceId,
@@ -701,7 +714,7 @@ export function createCalibrationBridge(options: {
           const safeError = redact(result.remoteError, result.secret) as Record<string, unknown>;
           throw new Error(String(safeError.message ?? "MCP tools/call failed"));
         }
-        return parseCoreRun(redact(result.response, result.secret));
+        return parseScopedCoreRun(redact(result.response, result.secret), input.workspaceId);
       }
       return { status: "unknown" };
     },

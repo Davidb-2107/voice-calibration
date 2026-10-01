@@ -97,6 +97,16 @@ Routes principales :
 Le endpoint de nom de voix ne fait transiter que `{ voiceRef, name }`. Il ne
 sert pas de proxy général vers ElevenLabs.
 
+Une instance locale appartient au workspace fixé à son démarrage (`local-default` par défaut).
+Les appels HTTP ne peuvent pas sélectionner un autre workspace. Les IDs utilisent uniquement
+les minuscules ASCII, chiffres, tirets et underscores. Les runs et artefacts sont vérifiés dans
+ce contexte avant toute reprise ou opération. Les credentials ElevenLabs et le WPM canonique
+restent globaux ; cette isolation locale ne suffit pas pour un SaaS multi-utilisateur.
+
+Toute identité fournie dans la query, le corps direct, `input` ou `draft` est contrôlée :
+une valeur invalide reçoit `400 invalid_workspace_id`, une valeur contradictoire
+`400 workspace_mismatch`. Un run absent ou étranger reçoit `404` avant reprise.
+
 ### Service applicatif
 
 Fichier : `src/calibration/application.ts`
@@ -146,20 +156,42 @@ Les interfaces isolent les effets :
 
 | Port | Implémentation locale | Remplacement possible |
 |---|---|---|
-| `CorpusRepository` | JSON sous `corpus/` | base de données |
-| `CalibrationRunRepository` | JSON sous `runs/` | base de données/job store |
-| `VoiceProfileRepository` | JSON sous `profiles/` | base de données |
-| `ArtifactStore` | fichiers sous `artifacts/` | stockage objet |
+| `CorpusRepository` | JSON sous `workspaces/<workspace-id>/corpus/` | base de données |
+| `CalibrationRunRepository` | JSON sous `workspaces/<workspace-id>/runs/` | base de données/job store |
+| `VoiceProfileRepository` | JSON sous `workspaces/<workspace-id>/profiles/` | base de données |
+| `ArtifactStore` | fichiers sous `workspaces/<workspace-id>/artifacts/` | stockage objet |
 | `VoiceDirectoryPort` | API ElevenLabs côté serveur | client/secret manager SaaS |
 | `CanonicalProfilePort` | `Shared/voice-calibration/voice_wpm.json` via Python | service WPM autoritatif |
 
 Fichier : `src/calibration/local-store.ts`
 
+Les opérations par ID transmettent le workspace comme premier argument :
+
+```ts
+// CalibrationRunRepository
+get(workspaceId: string, id: string): Promise<CalibrationRun | null>;
+recoverRunning(workspaceId: string, runId: string, recoveredAt: string): Promise<CalibrationRun | null>;
+consumeApproval?(workspaceId: string, runId: string, consumedAt: string): Promise<CalibrationRun>;
+// ArtifactStore
+put(workspaceId: string, runId: string, name: string, bytes: Uint8Array): Promise<string>;
+get(workspaceId: string, ref: string): Promise<Uint8Array>;
+// CalibrationApplication
+getRun(workspaceId: string, runId: string): Promise<CalibrationRun | null>;
+getReport(workspaceId: string, runId: string): Promise<CalibrationReport | null>;
+approve(workspaceId: string, runId: string, input: { requestDigest: string }): Promise<CalibrationRun>;
+execute(workspaceId: string, runId: string): Promise<CalibrationRun>;
+reconcile(workspaceId: string, runId: string): Promise<CalibrationRun>;
+publishProfile(workspaceId: string, runId: string): Promise<VoiceProfile>;
+```
+
+`create(run)` et `save(run)` utilisent l'identité du run ; `list(workspaceId)`
+conserve sa signature. Les verrous applicatifs sont indexés par workspace et ID de run.
+
 Le nouveau répertoire de données par défaut est :
 
 ```text
 ~/.voice-calibration/elevenlabs-calibration/
-└── workspaces/local-default/
+└── workspaces/<workspace-id>/
     ├── corpus/
     │   ├── draft.json
     │   ├── active.json
@@ -168,6 +200,9 @@ Le nouveau répertoire de données par défaut est :
     ├── profiles/<profile-id>.json
     └── artifacts/<run-id>/report.json
 ```
+
+`local-default` conserve ses fichiers et les références relatives de rapports
+existantes, sans migration ni copie.
 
 Pour préserver les runs créés avant l’extraction, si ce nouveau répertoire
 n’existe pas encore mais que l’ancien répertoire local existe, le runtime le
@@ -198,6 +233,11 @@ gère :
 
 Le bridge ne recalcule pas le WPM et ne crée pas un second fichier canonique.
 Il transporte les métriques et le résultat du cœur vers le service applicatif.
+
+Le pont refuse tout record MCP dont le workspace ne correspond pas à l'appel, y compris
+avant extraction d'une publication confirmée. Ce contrôle empêche la projection locale,
+la vérification canonique et l'écriture du profil après une réponse contradictoire ;
+il ne peut pas annuler une action déjà exécutée par le cœur MCP externe.
 
 ## Credentials et nom de voix
 

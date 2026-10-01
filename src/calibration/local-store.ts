@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
 import type { CalibrationRun, CorpusDraft, CorpusItem, CorpusVersion, VoiceProfile } from "./domain.js";
-import { transitionRun } from "./domain.js";
+import { assertWorkspaceId, transitionRun } from "./domain.js";
 import type {
   ArtifactStore,
   CalibrationRunRepository,
@@ -25,6 +25,7 @@ const DEFAULT_DATA_DIR = !existsSync(DATA_DIR) && existsSync(LEGACY_DATA_DIR) ? 
 const corpusQueues = new Map<string, Promise<unknown>>();
 
 function workspaceRoot(dataDir: string, workspaceId: string): string {
+  assertWorkspaceId(workspaceId);
   return join(dataDir, "workspaces", safeSegment(workspaceId, "workspaceId"));
 }
 
@@ -198,14 +199,16 @@ function makeCorpusRepository(dataDir: string, lockTimeoutMs: number): CorpusRep
   return {
     getDraft: loadDraft,
 
-    saveDraft(workspaceId, draft, expectedRevision) {
+    async saveDraft(workspaceId, draft, expectedRevision) {
+      assertWorkspaceId(workspaceId);
+      assertWorkspaceId(draft.workspaceId);
+      if (draft.workspaceId !== workspaceId) throw new Error("draft workspace mismatch");
       return queueFor(corpusQueues, `${resolve(dataDir)}:${workspaceId}`, () =>
         withFileLock(
           join(workspaceRoot(dataDir, workspaceId), "corpus", "draft.json"),
           async () => {
             const current = await loadDraft(workspaceId);
             if (current.revision !== expectedRevision) throw new ConflictError();
-            if (draft.workspaceId !== workspaceId) throw new Error("draft workspace mismatch");
             const saved: CorpusDraft = {
               workspaceId,
               revision: current.revision + 1,
@@ -219,7 +222,8 @@ function makeCorpusRepository(dataDir: string, lockTimeoutMs: number): CorpusRep
       );
     },
 
-    publishDraft(workspaceId, expectedRevision) {
+    async publishDraft(workspaceId, expectedRevision) {
+      assertWorkspaceId(workspaceId);
       return queueFor(corpusQueues, `${resolve(dataDir)}:${workspaceId}`, () =>
         withFileLock(
           join(workspaceRoot(dataDir, workspaceId), "corpus", "draft.json"),
@@ -271,11 +275,12 @@ function makeCorpusRepository(dataDir: string, lockTimeoutMs: number): CorpusRep
 }
 
 function makeRunRepository(dataDir: string, lockTimeoutMs: number): CalibrationRunRepository {
-  const pathFor = (id: string) =>
-    join(dataDir, "workspaces", "local-default", "runs", `${safeSegment(id, "runId")}.json`);
+  const pathFor = (workspaceId: string, id: string) =>
+    join(workspaceRoot(dataDir, workspaceId), "runs", `${safeSegment(id, "runId")}.json`);
   return {
     async create(run) {
-      const path = pathFor(run.id);
+      assertWorkspaceId(run.workspaceId);
+      const path = pathFor(run.workspaceId, run.id);
       await withFileLock(
         path,
         async () => {
@@ -285,21 +290,26 @@ function makeRunRepository(dataDir: string, lockTimeoutMs: number): CalibrationR
         lockTimeoutMs,
       );
     },
-    async get(id) {
-      const path = pathFor(id);
+    async get(workspaceId, id) {
+      const path = pathFor(workspaceId, id);
       return (await exists(path)) ? readJson<CalibrationRun>(path) : null;
     },
     async save(run) {
-      await withFileLock(pathFor(run.id), () => writeJson(pathFor(run.id), run), lockTimeoutMs);
+      assertWorkspaceId(run.workspaceId);
+      await withFileLock(
+        pathFor(run.workspaceId, run.id),
+        () => writeJson(pathFor(run.workspaceId, run.id), run),
+        lockTimeoutMs,
+      );
     },
     async list(workspaceId) {
-      const root = join(dataDir, "workspaces", safeSegment(workspaceId, "workspaceId"), "runs");
+      const root = join(workspaceRoot(dataDir, workspaceId), "runs");
       if (!(await exists(root))) return [];
       const names = (await readdir(root)).filter((name) => name.endsWith(".json")).sort();
       return Promise.all(names.map((name) => readJson<CalibrationRun>(join(root, name))));
     },
-    async recoverRunning(runId, recoveredAt) {
-      const path = pathFor(runId);
+    async recoverRunning(workspaceId, runId, recoveredAt) {
+      const path = pathFor(workspaceId, runId);
       return withFileLock(
         path,
         async () => {
@@ -314,8 +324,8 @@ function makeRunRepository(dataDir: string, lockTimeoutMs: number): CalibrationR
         lockTimeoutMs,
       );
     },
-    async consumeApproval(runId, consumedAt) {
-      const path = pathFor(runId);
+    async consumeApproval(workspaceId, runId, consumedAt) {
+      const path = pathFor(workspaceId, runId);
       return withFileLock(
         path,
         async () => {
@@ -347,21 +357,24 @@ function makeProfileRepository(dataDir: string): VoiceProfileRepository {
       return Promise.all(names.map((name) => readJson<VoiceProfile>(join(root, name))));
     },
     async publish(profile) {
+      assertWorkspaceId(profile.workspaceId);
       await writeJson(join(rootFor(profile.workspaceId), `${safeSegment(profile.id, "profileId")}.json`), profile);
     },
   };
 }
 
 function makeArtifactStore(dataDir: string): ArtifactStore {
-  const artifactsRoot = resolve(dataDir, "workspaces", "local-default", "artifacts");
   return {
-    async put(runId, name, bytes) {
-      const target = safeArtifactPath(join(dataDir, "workspaces", "local-default"), runId, name);
+    async put(workspaceId, runId, name, bytes) {
+      const workspacePath = workspaceRoot(dataDir, workspaceId);
+      const artifactsRoot = resolve(workspacePath, "artifacts");
+      const target = safeArtifactPath(workspacePath, runId, name);
       await assertNoSymlinkWithin(artifactsRoot, target);
       await writeAtomic(target, bytes);
       return relative(dataDir, target).split("\\").join("/");
     },
-    async get(ref) {
+    async get(workspaceId, ref) {
+      const artifactsRoot = resolve(workspaceRoot(dataDir, workspaceId), "artifacts");
       const target = resolve(dataDir, ref);
       if (target !== artifactsRoot && !target.startsWith(`${artifactsRoot}${sep}`)) {
         throw new Error("invalid artifact reference");

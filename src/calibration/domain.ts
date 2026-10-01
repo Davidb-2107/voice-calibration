@@ -1,3 +1,17 @@
+export class InvalidWorkspaceIdError extends Error {
+  readonly code = "invalid_workspace_id";
+  constructor() {
+    super("invalid workspaceId");
+    this.name = "InvalidWorkspaceIdError";
+  }
+}
+
+export function assertWorkspaceId(value: unknown): asserts value is string {
+  if (typeof value !== "string" || !/^[a-z0-9][a-z0-9_-]*$/u.test(value)) {
+    throw new InvalidWorkspaceIdError();
+  }
+}
+
 export type RunStatus =
   | "draft"
   | "dry_run_ready"

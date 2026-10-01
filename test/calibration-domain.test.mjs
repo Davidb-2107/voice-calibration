@@ -1,8 +1,17 @@
 import { test } from "node:test";
-import { match, strictEqual, throws } from "node:assert";
+import { doesNotThrow, match, strictEqual, throws } from "node:assert";
 
 import { fingerprintRequest, canonicalizeRequest } from "../dist/calibration/fingerprint.js";
-import { transitionRun } from "../dist/calibration/domain.js";
+import { assertWorkspaceId, InvalidWorkspaceIdError, transitionRun } from "../dist/calibration/domain.js";
+
+test("workspace IDs have one canonical spelling", () => {
+  for (const id of ["local-default", "workspace-a", "a_2", "0"]) {
+    doesNotThrow(() => assertWorkspaceId(id));
+  }
+  for (const id of ["", "WORKSPACE-A", "a/b", "a\\b", ".", "..", "a b", "é", null, 3]) {
+    throws(() => assertWorkspaceId(id), InvalidWorkspaceIdError);
+  }
+});
 
 const request = {
   contractDigest: "contract-sha",

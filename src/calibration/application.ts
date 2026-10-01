@@ -19,7 +19,7 @@ import type {
   ResolvedCalibrationRequest,
   VoiceProfile,
 } from "./domain.js";
-import { transitionRun } from "./domain.js";
+import { assertWorkspaceId, transitionRun } from "./domain.js";
 import { fingerprintRequest } from "./fingerprint.js";
 import type { LocalStore } from "./ports.js";
 import { ConflictError, type VoiceDirectoryPort } from "./ports.js";
@@ -315,20 +315,21 @@ export class CalibrationApplication {
     sessionNonces.set(key, this.sessionNonce);
   }
 
-  private async withRunLock<T>(runId: string, work: () => Promise<T>): Promise<T> {
+  private async withRunLock<T>(workspaceId: string, runId: string, work: () => Promise<T>): Promise<T> {
     const key = this.repositories as unknown as object;
     let locks = runLocks.get(key);
     if (!locks) {
       locks = new Map();
       runLocks.set(key, locks);
     }
-    const previous = locks.get(runId) ?? Promise.resolve();
+    const lockId = JSON.stringify([workspaceId, runId]);
+    const previous = locks.get(lockId) ?? Promise.resolve();
     const next = previous.catch(() => undefined).then(work);
-    locks.set(runId, next);
+    locks.set(lockId, next);
     try {
       return await next;
     } finally {
-      if (locks.get(runId) === next) locks.delete(runId);
+      if (locks.get(lockId) === next) locks.delete(lockId);
     }
   }
 
@@ -352,7 +353,7 @@ export class CalibrationApplication {
     await Promise.all(
       runs
         .filter((run) => run.status === "running")
-        .map((run) => this.repositories.runs.recoverRunning(run.id, recoveredAt)),
+        .map((run) => this.repositories.runs.recoverRunning(workspaceId, run.id, recoveredAt)),
     );
   }
 
@@ -416,8 +417,8 @@ export class CalibrationApplication {
     };
   }
 
-  private async getRunOrThrow(runId: string): Promise<CalibrationRun> {
-    const run = await this.getRun(runId);
+  private async getRunOrThrow(workspaceId: string, runId: string): Promise<CalibrationRun> {
+    const run = await this.getRun(workspaceId, runId);
     if (!run) throw new NotFoundError(`calibration run not found: ${runId}`);
     return run;
   }
@@ -438,12 +439,12 @@ export class CalibrationApplication {
       createdAt: nowIso(this.clock),
     };
     const bytes = Buffer.from(`${JSON.stringify(report)}\n`, "utf8");
-    return this.repositories.artifacts.put(run.id, REPORT_NAME, bytes);
+    return this.repositories.artifacts.put(run.workspaceId, run.id, REPORT_NAME, bytes);
   }
 
   private async loadReport(run: CalibrationRun): Promise<CalibrationReport> {
     if (!run.reportId) throw new ConflictError("calibration report is not available");
-    const bytes = await this.repositories.artifacts.get(run.reportId);
+    const bytes = await this.repositories.artifacts.get(run.workspaceId, run.reportId);
     return JSON.parse(Buffer.from(bytes).toString("utf8")) as CalibrationReport;
   }
 
@@ -452,6 +453,7 @@ export class CalibrationApplication {
   }
 
   async getBootstrap(workspaceId = DEFAULT_WORKSPACE): Promise<BootstrapView> {
+    assertWorkspaceId(workspaceId);
     await this.ensureRecovered(workspaceId);
     const [config, activeCorpus, profiles, recentRuns, observationSummary] = await Promise.all([
       this.credentials ? this.credentials.status() : Promise.resolve({ configured: true }),
@@ -471,6 +473,7 @@ export class CalibrationApplication {
   }
 
   async getCorpus(workspaceId = DEFAULT_WORKSPACE): Promise<CorpusView> {
+    assertWorkspaceId(workspaceId);
     const [draft, activeVersion, versions] = await Promise.all([
       this.repositories.corpus.getDraft(workspaceId),
       this.repositories.corpus.getActiveVersion(workspaceId),
@@ -480,16 +483,20 @@ export class CalibrationApplication {
   }
 
   async getDraft(workspaceId = DEFAULT_WORKSPACE): Promise<{ draft: CorpusDraft; etag: string }> {
+    assertWorkspaceId(workspaceId);
     const draft = await this.repositories.corpus.getDraft(workspaceId);
     return { draft, etag: `W/"corpus-draft-${draft.revision}"` };
   }
 
   async saveDraft(workspaceId: string, draft: CorpusDraft, expectedRevision: number): Promise<CorpusDraft> {
+    assertWorkspaceId(workspaceId);
+    assertWorkspaceId(draft.workspaceId);
     if (draft.workspaceId !== workspaceId) throw new ContractValidationError("draft workspace mismatch");
     return this.repositories.corpus.saveDraft(workspaceId, clone(draft), expectedRevision);
   }
 
   async publishCorpusVersion(workspaceId: string, expectedRevision: number): Promise<CorpusVersion> {
+    assertWorkspaceId(workspaceId);
     return this.repositories.corpus.publishDraft(workspaceId, expectedRevision);
   }
 
@@ -508,6 +515,7 @@ export class CalibrationApplication {
   }
 
   async prepareDryRun(input: CalibrationInput): Promise<CalibrationRun> {
+    assertWorkspaceId(input.workspaceId);
     await this.ensureRecovered(input.workspaceId);
     await this.assertConfigured();
     const activeCorpus = await this.repositories.corpus.getActiveVersion(input.workspaceId);
@@ -575,9 +583,10 @@ export class CalibrationApplication {
     return ready;
   }
 
-  async approve(runId: string, input: { requestDigest: string }): Promise<CalibrationRun> {
-    return this.withRunLock(runId, async () => {
-      const run = await this.getRunOrThrow(runId);
+  async approve(workspaceId: string, runId: string, input: { requestDigest: string }): Promise<CalibrationRun> {
+    assertWorkspaceId(workspaceId);
+    return this.withRunLock(workspaceId, runId, async () => {
+      const run = await this.getRunOrThrow(workspaceId, runId);
       await this.assertVoiceNotCalibrated(
         run.workspaceId,
         run.request.voiceRef,
@@ -611,9 +620,10 @@ export class CalibrationApplication {
     });
   }
 
-  async execute(runId: string): Promise<CalibrationRun> {
-    return this.withRunLock(runId, async () => {
-      const run = await this.getRunOrThrow(runId);
+  async execute(workspaceId: string, runId: string): Promise<CalibrationRun> {
+    assertWorkspaceId(workspaceId);
+    return this.withRunLock(workspaceId, runId, async () => {
+      const run = await this.getRunOrThrow(workspaceId, runId);
       await this.assertVoiceNotCalibrated(
         run.workspaceId,
         run.request.voiceRef,
@@ -680,7 +690,7 @@ export class CalibrationApplication {
 
       const consumedAt = nowIso(this.clock);
       const running = this.repositories.runs.consumeApproval
-        ? await this.repositories.runs.consumeApproval(run.id, consumedAt)
+        ? await this.repositories.runs.consumeApproval(workspaceId, run.id, consumedAt)
         : (() => {
             const fallback = transitionRun(run, { type: "execute" });
             if (fallback.approval) fallback.approval.consumedAt = consumedAt;
@@ -717,9 +727,10 @@ export class CalibrationApplication {
     });
   }
 
-  async reconcile(runId: string): Promise<CalibrationRun> {
-    return this.withRunLock(runId, async () => {
-      const run = await this.getRunOrThrow(runId);
+  async reconcile(workspaceId: string, runId: string): Promise<CalibrationRun> {
+    assertWorkspaceId(workspaceId);
+    return this.withRunLock(workspaceId, runId, async () => {
+      const run = await this.getRunOrThrow(workspaceId, runId);
       if (isCoreBackedRun(run) && this.bridge.reconcile) {
         let reconciled: ExecutionResult | CoreRunRecord | { status: "unknown" };
         try {
@@ -746,10 +757,14 @@ export class CalibrationApplication {
     });
   }
 
-  async getRun(runId: string): Promise<CalibrationRun | null> {
-    await this.ensureRecovered(DEFAULT_WORKSPACE);
-    const local = await this.repositories.runs.get(runId);
-    if (!local || !isCoreBackedRun(local) || !this.bridge.getRun) return local;
+  async getRun(workspaceId: string, runId: string): Promise<CalibrationRun | null> {
+    assertWorkspaceId(workspaceId);
+    const initial = await this.repositories.runs.get(workspaceId, runId);
+    if (!initial || initial.workspaceId !== workspaceId) return null;
+    await this.ensureRecovered(workspaceId);
+    const local = await this.repositories.runs.get(workspaceId, runId);
+    if (!local || local.workspaceId !== workspaceId) return null;
+    if (!isCoreBackedRun(local) || !this.bridge.getRun) return local;
     let core: CoreRunRecord;
     try {
       core = await this.bridge.getRun({ workspaceId: local.workspaceId, runId: local.id });
@@ -763,14 +778,16 @@ export class CalibrationApplication {
     return projected;
   }
 
-  async getReport(runId: string): Promise<CalibrationReport | null> {
-    const run = await this.getRun(runId);
+  async getReport(workspaceId: string, runId: string): Promise<CalibrationReport | null> {
+    assertWorkspaceId(workspaceId);
+    const run = await this.getRun(workspaceId, runId);
     if (!run?.reportId) return null;
     return this.loadReport(run);
   }
 
-  async publishProfile(runId: string): Promise<VoiceProfile> {
-    const run = await this.getRunOrThrow(runId);
+  async publishProfile(workspaceId: string, runId: string): Promise<VoiceProfile> {
+    assertWorkspaceId(workspaceId);
+    const run = await this.getRunOrThrow(workspaceId, runId);
     if (run.status !== "succeeded") throw new ConflictError("profile publication requires a successful run");
     if (run.request.postproc !== "cut")
       throw new ContractValidationError('profile publication requires postproc="cut" for the canonical WPM source');
@@ -821,6 +838,7 @@ export class CalibrationApplication {
   }
 
   async listVoiceProfiles(workspaceId = DEFAULT_WORKSPACE): Promise<VoiceProfile[]> {
+    assertWorkspaceId(workspaceId);
     return this.repositories.profiles.list(workspaceId);
   }
 

@@ -42,6 +42,22 @@ Le bind est local par défaut. L’interface impose le corpus publié, le
 snapshot approuvé, le dry-run, l’approbation avant l’appel facturable,
 l’idempotence des runs et la protection des secrets.
 
+Une instance locale appartient au workspace fixé à son démarrage (`local-default` par défaut).
+Les appels HTTP ne peuvent pas sélectionner un autre workspace. Les IDs utilisent uniquement
+les minuscules ASCII, chiffres, tirets et underscores. Les runs et artefacts sont vérifiés dans
+ce contexte avant toute reprise ou opération. Les credentials ElevenLabs et le WPM canonique
+restent globaux ; cette isolation locale ne suffit pas pour un SaaS multi-utilisateur.
+
+L'option programmatique `workspaceId` du lanceur public permet de fixer cette identité :
+
+```js
+import { startVoiceCalibrationUi } from "voice-calibration";
+const ui = await startVoiceCalibrationUi({ workspaceId: "workspace-a" });
+```
+
+Sans option, les données et références existantes sous `workspaces/local-default/`
+restent lisibles sans migration. Le navigateur utilise le workspace de l'instance.
+
 ## Architecture
 
 ```text

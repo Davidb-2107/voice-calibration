@@ -259,6 +259,7 @@ test("client resynchronizes the run after execute returns an HTTP failure", asyn
   await flush();
   const dryRunCall = calls.find((call) => call.url === "/api/v1/calibration-runs/dry-run");
   const dryRunPayload = JSON.parse(dryRunCall?.init.body);
+  strictEqual(Object.hasOwn(dryRunPayload, "workspaceId"), false);
   deepStrictEqual(dryRunPayload.params, {
     model_id: "eleven_multilingual_v2",
     mode: "precision",
