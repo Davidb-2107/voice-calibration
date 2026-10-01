@@ -18,6 +18,7 @@ Options:
   --env-file <file>      Fichier credentials ElevenLabs de l'instance
   --wpm-path <file>      Source WPM canonique de l'instance
   --data-dir <dir>       Répertoire local des runs et profils
+  --state-dir <dir>      Racine du state MCP (workspaces, cache et gate)
   --host <host>          Adresse d'écoute (défaut : 127.0.0.1)
   --port <port>          Port d'écoute (défaut : port libre)
   --open                 Ouvre l'interface dans le navigateur
@@ -33,6 +34,7 @@ interface Options {
   credentials?: { envFile: string };
   wpmPath?: string;
   dataDir?: string;
+  stateDir?: string;
   host?: string;
   port?: number;
   open: boolean;
@@ -60,6 +62,7 @@ function parseArgs(args: string[]): Options | null {
     if (arg === "--open") options.open = true;
     else if (arg === "--allow-network") options.allowNetwork = true;
     else if (arg === "--data-dir") options.dataDir = valueFor(args, index++, arg);
+    else if (arg === "--state-dir") options.stateDir = valueFor(args, index++, arg);
     else if (arg === "--workspace-id") options.workspaceId = valueFor(args, index++, arg);
     else if (arg === "--env-file") options.credentials = { envFile: valueFor(args, index++, arg) };
     else if (arg === "--wpm-path") options.wpmPath = valueFor(args, index++, arg);

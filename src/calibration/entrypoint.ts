@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { createCalibrationApplication } from "./application.js";
-import { createCalibrationBridge, createCanonicalProfilePort } from "./bridge.js";
+import { type CalibrationTransport, createCalibrationBridge, createCanonicalProfilePort } from "./bridge.js";
 import {
   type CredentialOptions,
   createCredentialProvider,
@@ -14,6 +14,7 @@ import {
 import { assertWorkspaceId } from "./domain.js";
 import { fingerprintConfiguration } from "./fingerprint.js";
 import { type CalibrationUiHandle, startCalibrationUi } from "./http-server.js";
+import { canonicalLocalPath, resolveLocalDataDir } from "./local-store.js";
 import { createLocalStore } from "./ports.js";
 
 export interface CalibrationUiOptions {
@@ -24,6 +25,8 @@ export interface CalibrationUiOptions {
   allowNetwork?: boolean;
   credentials?: Pick<CredentialOptions, "env" | "envFile">;
   wpmPath?: string;
+  stateDir?: string;
+  mcpTransport?: CalibrationTransport;
 }
 
 export async function startVoiceCalibrationUi(options: CalibrationUiOptions = {}): Promise<CalibrationUiHandle> {
@@ -32,6 +35,17 @@ export async function startVoiceCalibrationUi(options: CalibrationUiOptions = {}
   const cwd = process.cwd();
   const environment = { ...process.env };
   const { dataDir, host, port, allowNetwork } = options;
+  const suppliedStateDir = options.stateDir;
+  if (suppliedStateDir !== undefined && (typeof suppliedStateDir !== "string" || !suppliedStateDir.trim())) {
+    throw new Error("Invalid MCP state directory");
+  }
+  const boundInstance = workspaceId !== "local-default" || suppliedStateDir !== undefined;
+  const resolvedDataDir = resolveLocalDataDir(dataDir);
+  const stateDir = boundInstance
+    ? canonicalLocalPath(
+        suppliedStateDir === undefined ? resolve(resolvedDataDir, "mcp") : resolve(cwd, suppliedStateDir),
+      )
+    : undefined;
   const suppliedCredentials = options.credentials;
   const suppliedWpmPath = options.wpmPath;
   if (workspaceId !== "local-default" && (suppliedCredentials === undefined || suppliedWpmPath === undefined)) {
@@ -99,27 +113,55 @@ export async function startVoiceCalibrationUi(options: CalibrationUiOptions = {}
   }
   const referenceBase =
     wpmPath && wpmPath === historicalWpmPath ? "Shared/voice-calibration/voice_wpm.json" : undefined;
+  if (boundInstance && wpmPath) wpmPath = canonicalLocalPath(wpmPath);
   const language = environment.VOICE_CALIBRATION_LANGUAGE === "en" ? "en" : "fr";
   const credentials = createCredentialProvider({ env: secret === undefined ? {} : { ELEVENLABS_API_KEY: secret } });
   const configurationIdentity =
     secret === undefined
       ? undefined
-      : fingerprintConfiguration({ workspaceId, provider: "elevenlabs", wpmPath }, secret);
+      : fingerprintConfiguration({ workspaceId, provider: "elevenlabs", wpmPath, stateDir }, secret);
+  const bridge = createCalibrationBridge({
+    credentials,
+    wpmPath,
+    transport: options.mcpTransport,
+    ...(boundInstance
+      ? { workspaceId, stateDir, uiWorkspaceDir: resolve(resolvedDataDir, "workspaces", workspaceId) }
+      : {}),
+  });
   const application = createCalibrationApplication({
-    repositories: createLocalStore(dataDir),
+    repositories: createLocalStore(resolvedDataDir),
     configurationIdentity,
-    bridge: createCalibrationBridge({ credentials, wpmPath }),
+    bridge,
     canonical: createCanonicalProfilePort({ wpmPath, language, referenceBase }),
     credentials,
     voiceDirectory: createVoiceDirectoryProvider({ credentials }),
   });
-  return startCalibrationUi({
-    application,
-    workspaceId,
-    host,
-    port: port ?? 0,
-    allowNetwork,
-  });
+  let ui: CalibrationUiHandle | undefined;
+  let exited = false;
+  if (boundInstance)
+    bridge.onExit?.(() => {
+      exited = true;
+      if (ui) void ui.close();
+    });
+  try {
+    if (boundInstance) await bridge.getSchema();
+    if (exited) throw new Error("MCP process exited; restart the calibration instance");
+    ui = await startCalibrationUi({
+      application,
+      workspaceId,
+      host,
+      port: port ?? 0,
+      allowNetwork,
+    });
+    if (exited) {
+      await ui.close();
+      throw new Error("MCP process exited; restart the calibration instance");
+    }
+    return ui;
+  } catch (error) {
+    await application.close();
+    throw error;
+  }
 }
 
 export function openInBrowser(target: string): void {

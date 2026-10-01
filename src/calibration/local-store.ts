@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { constants, existsSync } from "node:fs";
+import { constants, existsSync, realpathSync } from "node:fs";
 import { access, link, lstat, mkdir, open, readdir, readFile, rename, rm } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 import type { CalibrationRun, CorpusDraft, CorpusItem, CorpusVersion, VoiceProfile } from "./domain.js";
 import { assertWorkspaceId, transitionRun } from "./domain.js";
@@ -395,8 +395,23 @@ function resolveLockTimeout(lockTimeoutMs: number | undefined): number {
   return value;
 }
 
+export function resolveLocalDataDir(dataDir = DEFAULT_DATA_DIR): string {
+  return canonicalLocalPath(dataDir);
+}
+
+export function canonicalLocalPath(path: string): string {
+  const absolute = resolve(path);
+  try {
+    return realpathSync.native(absolute);
+  } catch (error) {
+    const parent = dirname(absolute);
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT" || parent === absolute) throw error;
+    return join(canonicalLocalPath(parent), basename(absolute));
+  }
+}
+
 export function createLocalStore(dataDir = DEFAULT_DATA_DIR, options: LocalStoreOptions = {}): LocalStore {
-  const resolvedDataDir = resolve(dataDir);
+  const resolvedDataDir = resolveLocalDataDir(dataDir);
   const lockTimeoutMs = resolveLockTimeout(options.lockTimeoutMs);
   return {
     corpus: makeCorpusRepository(resolvedDataDir, lockTimeoutMs),

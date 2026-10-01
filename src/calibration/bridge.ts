@@ -83,6 +83,7 @@ export interface ObservationSummary {
   sourceAvailable: boolean;
 }
 export interface CalibrationBridge {
+  onExit?(listener: () => void): void;
   getSchema(): Promise<unknown>;
   dryRun(input: { runId: string; request: ResolvedCalibrationRequest }): Promise<DryRunResult>;
   propose?(input: { workspaceId: string; request: ResolvedCalibrationRequest }): Promise<DryRunResult>;
@@ -116,7 +117,8 @@ interface TransportCall {
   toolError?: boolean;
   remoteError?: { code?: number; message?: string; data?: unknown };
 }
-interface CalibrationTransport {
+export interface CalibrationTransport {
+  onExit?(listener: () => void): void;
   schema(secret: string, timeoutMs: number): Promise<unknown>;
   call(args: Record<string, unknown>, secret: string, timeoutMs: number): Promise<TransportCall>;
   callTool?(name: string, args: Record<string, unknown>, secret: string, timeoutMs: number): Promise<TransportCall>;
@@ -170,6 +172,7 @@ function makeRequest(snapshot: ResolvedCalibrationRequest, dryRun: boolean): Rec
   return {
     ...params,
     voice: snapshot.voiceRef,
+    voice_id: params.voice_id ?? snapshot.voiceRef,
     corpus_key: params.corpus_key ?? snapshot.voiceRef,
     postproc: snapshot.postproc,
     dry_run: dryRun,
@@ -177,10 +180,15 @@ function makeRequest(snapshot: ResolvedCalibrationRequest, dryRun: boolean): Rec
 }
 
 function makeGateRequest(snapshot: ResolvedCalibrationRequest): Record<string, unknown> {
-  return makeRequest(snapshot, false);
+  const request = makeRequest(snapshot, false);
+  delete request.dry_run;
+  return request;
 }
 
 class NodeMcpStdioTransport implements CalibrationTransport {
+  private exitListener?: () => void;
+  private terminalError?: BridgeTransportError;
+  private readonly boundInstance: boolean;
   private readonly launchEnv: NodeJS.ProcessEnv;
   private child: ChildProcessWithoutNullStreams | null = null;
   private nextId = 1;
@@ -197,12 +205,24 @@ class NodeMcpStdioTransport implements CalibrationTransport {
     private readonly command = "voice-calibration-mcp",
     private readonly args: string[] = [],
     private readonly cwd?: string,
-    launch?: { wpmPath?: string },
+    launch?: { wpmPath?: string; workspaceId?: string; stateDir?: string; uiWorkspaceDir?: string },
   ) {
+    this.boundInstance = launch?.workspaceId !== undefined;
     this.launchEnv = { ...process.env };
     if (launch !== undefined) {
       delete this.launchEnv.VOICE_WPM_PATH;
+      delete this.launchEnv.VOICE_CALIBRATION_WORKSPACE_ID;
+      delete this.launchEnv.VOICE_CALIBRATION_UI_WORKSPACE_DIR;
       if (launch.wpmPath !== undefined) this.launchEnv.VOICE_WPM_PATH = launch.wpmPath;
+      if (launch.workspaceId !== undefined) {
+        assertWorkspaceId(launch.workspaceId);
+        delete this.launchEnv.VOICE_CALIBRATION_GATE_DIR;
+        delete this.launchEnv.VOICE_CALIBRATION_STATE_DIR;
+        this.launchEnv.VOICE_CALIBRATION_WORKSPACE_ID = launch.workspaceId;
+        if (launch.stateDir !== undefined) this.launchEnv.VOICE_CALIBRATION_STATE_DIR = launch.stateDir;
+        if (launch.uiWorkspaceDir !== undefined)
+          this.launchEnv.VOICE_CALIBRATION_UI_WORKSPACE_DIR = launch.uiWorkspaceDir;
+      }
     }
   }
 
@@ -211,6 +231,7 @@ class NodeMcpStdioTransport implements CalibrationTransport {
   }
 
   private ensureChild(secret = ""): ChildProcessWithoutNullStreams {
+    if (this.terminalError) throw this.terminalError;
     if (this.child) {
       if (secret && secret !== this.secret)
         throw new BridgeTransportError("credential changed; restart calibration bridge", false, this.diagnostic());
@@ -235,11 +256,17 @@ class NodeMcpStdioTransport implements CalibrationTransport {
     });
     child.on("error", (error) => this.failPending(new BridgeTransportError(error.message, false, this.diagnostic())));
     child.on("exit", (code, signal) => {
+      const unexpected = this.child === child;
       if (this.child === child) this.child = null;
       if (this.initialized) this.initialized = null;
-      this.failPending(
-        new BridgeTransportError(`MCP process exited (${code ?? signal ?? "unknown"})`, true, this.diagnostic()),
+      const error = new BridgeTransportError(
+        `MCP process exited (${code ?? signal ?? "unknown"})`,
+        true,
+        this.diagnostic(),
       );
+      if (unexpected && this.boundInstance) this.terminalError = error;
+      this.failPending(error);
+      if (unexpected) this.exitListener?.();
     });
     return child;
   }
@@ -389,6 +416,11 @@ class NodeMcpStdioTransport implements CalibrationTransport {
     return this.callTool("calibrate_voice", args, secret, timeoutMs);
   }
 
+  onExit(listener: () => void): void {
+    this.exitListener = listener;
+    if (this.terminalError) listener();
+  }
+
   async close(): Promise<void> {
     const child = this.child;
     if (!child) return;
@@ -499,8 +531,19 @@ export function createCalibrationBridge(options: {
   credentials: CredentialProvider;
   timeoutMs?: number;
   wpmPath?: string;
+  workspaceId?: string;
+  stateDir?: string;
+  uiWorkspaceDir?: string;
 }): CalibrationBridge {
-  const launch = Object.hasOwn(options, "wpmPath") ? { wpmPath: options.wpmPath } : undefined;
+  const launch =
+    Object.hasOwn(options, "wpmPath") || options.workspaceId !== undefined
+      ? {
+          wpmPath: options.wpmPath,
+          workspaceId: options.workspaceId,
+          stateDir: options.stateDir,
+          uiWorkspaceDir: options.uiWorkspaceDir,
+        }
+      : undefined;
   const transport = options.transport ?? new NodeMcpStdioTransport(undefined, undefined, undefined, launch);
   const timeoutMs = options.timeoutMs ?? 120_000;
   const invokeTool = async (
@@ -547,6 +590,7 @@ export function createCalibrationBridge(options: {
   };
 
   return {
+    onExit: (listener) => transport.onExit?.(listener),
     async getSchema() {
       let credential: { provider: string; secret: string };
       try {
@@ -557,7 +601,19 @@ export function createCalibrationBridge(options: {
       if (credential.provider !== "elevenlabs")
         throw new Error(`unsupported credential provider: ${credential.provider}`);
       try {
-        return await transport.schema(credential.secret, Math.min(timeoutMs, 10_000));
+        const schema = await transport.schema(credential.secret, Math.min(timeoutMs, 10_000));
+        if (options.workspaceId !== undefined) {
+          const info = await invokeTool("get_server_info", {});
+          const identity = resultObject(info.response);
+          if (
+            info.remoteError ||
+            identity.workspace_id !== options.workspaceId ||
+            identity.state_dir !== options.stateDir
+          ) {
+            throw new Error("MCP instance configuration mismatch; use a workspace-aware Python adapter");
+          }
+        }
+        return schema;
       } catch (error) {
         if (error instanceof BridgeTransportError) throw new Error(String(redact(error.message, credential.secret)));
         throw new Error(String(redact((error as Error).message, credential.secret)));

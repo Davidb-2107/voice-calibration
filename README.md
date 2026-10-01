@@ -57,7 +57,8 @@ vers la clé globale ou le WPM historique n'est effectué :
 ```bash
 node dist/calibration-cli.js --workspace-id atelier-a \
   --env-file C:/calibration/atelier-a/.env \
-  --wpm-path C:/calibration/atelier-a/voice_wpm.json --open
+  --wpm-path C:/calibration/atelier-a/voice_wpm.json \
+  --state-dir C:/calibration/state --open
 ```
 
 Le lanceur public accepte les mêmes options :
@@ -68,6 +69,7 @@ const ui = await startVoiceCalibrationUi({
   workspaceId: "atelier-a",
   credentials: { envFile: "C:/calibration/atelier-a/.env" },
   wpmPath: "C:/calibration/atelier-a/voice_wpm.json",
+  stateDir: "C:/calibration/state",
 });
 ```
 
@@ -81,10 +83,27 @@ leurs mutations renvoient `409 configuration_mismatch`. Un run antérieur sans
 empreinte renvoie `409 configuration_identity_missing` lors d'une mutation.
 Modifier seulement le contenu du fichier WPM ne change pas l'empreinte.
 
-Le correctif Python qui applique `VOICE_WPM_PATH` est actuellement dans le
-worktree local `mcp-python-instance-configuration` ; l'installation canonique
-du MCP n'a pas été changée. Pour valider le parcours complet avant intégration,
-le child Python doit charger ce candidat via `PYTHONPATH` propre au processus.
+La racine MCP contient `workspaces/<id>/` pour le contexte et le cache, et
+`gate/workspaces/<id>/runs/` pour les approbations. Sans `--state-dir`, un
+workspace nommé utilise `<data-dir effectif>/mcp`. Le journal est
+`<wpm-path>.runs.jsonl` ; les verrous de corpus et de journal suivent ces
+fichiers. Deux workspaces qui désignent volontairement le même WPM partagent
+donc cette source.
+
+Le lanceur initialise le MCP et vérifie son workspace et sa racine avant de
+servir HTTP. Les verrous OS de possession empêchent deux instances d'ouvrir
+le même workspace MCP ou le même workspace UI ; ils se libèrent après arrêt
+normal ou forcé. La racine MCP entre dans l'empreinte des nouveaux runs.
+Si l'enfant MCP s'arrête, son interface HTTP se ferme aussi ; relancer
+explicitement l'instance pour reprendre.
+Le lancement historique implicite reste disponible ; fournir `--state-dir`
+active aussi ce contrat pour `local-default`.
+
+L'adaptateur Python doit prendre en charge ce contrat d'instance. Un ancien
+adaptateur est refusé avant le démarrage HTTP. Pour tester une version Python
+candidate avant son intégration, sélectionner son répertoire de package via
+`PYTHONPATH` pour le seul processus de lancement ; aucune installation globale
+n'est nécessaire.
 
 ## Architecture
 

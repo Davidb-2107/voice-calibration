@@ -23,6 +23,11 @@ test("configuration fingerprint changes with key, WPM source, provider and works
   strictEqual(first === fingerprintConfiguration({ ...config, workspaceId: "workspace-b" }, "key-a"), false);
   strictEqual(first === fingerprintConfiguration({ ...config, provider: "other" }, "key-a"), false);
   strictEqual(first.includes("key-a"), false);
+  const bound = fingerprintConfiguration({ ...config, stateDir: "C:/calibration/state-a" }, "key-a");
+  match(bound, /^v2:hmac-sha256:[a-f0-9]{64}$/);
+  strictEqual(bound, fingerprintConfiguration({ ...config, stateDir: "C:/calibration/state-a" }, "key-a"));
+  strictEqual(bound === fingerprintConfiguration({ ...config, stateDir: "C:/calibration/state-b" }, "key-a"), false);
+  strictEqual(first === bound, false);
 });
 
 const request = {

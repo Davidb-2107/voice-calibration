@@ -300,7 +300,7 @@ export class CalibrationApplication {
   constructor(options: CalibrationApplicationOptions) {
     if (
       options.configurationIdentity !== undefined &&
-      !/^v1:hmac-sha256:[a-f0-9]{64}$/u.test(options.configurationIdentity)
+      !/^v[12]:hmac-sha256:[a-f0-9]{64}$/u.test(options.configurationIdentity)
     ) {
       throw new TypeError("invalid configurationIdentity");
     }

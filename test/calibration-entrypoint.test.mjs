@@ -1,12 +1,63 @@
 import { test } from "node:test";
 import { deepStrictEqual, rejects, strictEqual } from "node:assert";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createCanonicalProfilePort } from "../dist/calibration/bridge.js";
 import { findVaultRoot } from "../dist/calibration/credentials.js";
 import { startVoiceCalibrationUi } from "../dist/calibration/entrypoint.js";
+import { fingerprintConfiguration } from "../dist/calibration/fingerprint.js";
+import { createLocalStore } from "../dist/calibration/local-store.js";
+
+function instanceTransport(workspaceId, stateDir) {
+  return {
+    async schema() { return { type: "object" }; },
+    async callTool() { return { response: { workspace_id: workspaceId, state_dir: stateDir }, emitted: true }; },
+    async close() {},
+  };
+}
+
+test("launcher canonicalizes state directory aliases before fingerprint and MCP binding", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "calibration-alias-"));
+  const stateDir = join(root, "state");
+  const alias = join(root, "alias");
+  mkdirSync(stateDir);
+  symlinkSync(stateDir, alias, process.platform === "win32" ? "junction" : "dir");
+  const wpmPath = join(root, "wpm.json");
+  writeFileSync(wpmPath, "{}");
+  let ui;
+  t.after(async () => { await ui?.close(); rmSync(root, { recursive: true, force: true }); });
+  ui = await startVoiceCalibrationUi({
+    workspaceId: "staging", stateDir: alias, dataDir: join(root, "ui"), wpmPath,
+    credentials: { env: { ELEVENLABS_API_KEY: "test-key" } },
+    mcpTransport: instanceTransport("staging", realpathSync.native(stateDir)),
+  });
+  strictEqual((await fetch(`${ui.url}/api/v1/bootstrap`)).status, 200);
+});
+
+test("historical launcher preserves v1 identity for a WPM path through a directory alias", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "calibration-legacy-alias-"));
+  const sourceDir = join(root, "source");
+  const alias = join(root, "alias");
+  mkdirSync(sourceDir);
+  writeFileSync(join(sourceDir, "wpm.json"), "{}");
+  symlinkSync(sourceDir, alias, process.platform === "win32" ? "junction" : "dir");
+  const wpmPath = join(alias, "wpm.json");
+  const dataDir = join(root, "ui");
+  const secret = "legacy-test-key";
+  await createLocalStore(dataDir).runs.create({
+    id: "legacy-run", workspaceId: "local-default", status: "running", idempotencyKey: "legacy-run",
+    configurationIdentity: fingerprintConfiguration({ workspaceId: "local-default", provider: "elevenlabs", wpmPath }, secret),
+    request: { voiceRef: "voice-test", params: {}, postproc: "cut" }, requestDigest: "legacy-digest",
+    approval: null, reportId: null, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z",
+  });
+  let ui;
+  t.after(async () => { await ui?.close(); rmSync(root, { recursive: true, force: true }); });
+  ui = await startVoiceCalibrationUi({ dataDir, wpmPath, credentials: { env: { ELEVENLABS_API_KEY: secret } } });
+  const bootstrap = await (await fetch(`${ui.url}/api/v1/bootstrap`)).json();
+  strictEqual(bootstrap.recentRuns[0].status, "execution_unknown");
+});
 
 test("canonical corpus uses the same vault discovery as credentials outside the vault", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "calibration-entrypoint-"));
@@ -54,6 +105,8 @@ test("explicit sources fail closed before storage is created", async (t) => {
     { ...valid, wpmPath: " " },
     { ...valid, wpmPath: join(root, "missing.json") },
     { ...valid, workspaceId: null },
+    { ...valid, stateDir: " " },
+    { ...valid, stateDir: null },
   ];
   for (const value of ["not json", "[]", "null", '{"voice":null}']) {
     const path = join(root, `bad-${invalid.length}.json`);
@@ -93,9 +146,9 @@ test("public launchers keep separate WPM sources and snapshot caller inputs", as
     return originalFetch(url, init);
   };
   t.after(() => { globalThis.fetch = originalFetch; });
-  const a = await startVoiceCalibrationUi({ workspaceId: "workspace-a", dataDir: join(root, "data-a"), credentials: { env: envA }, wpmPath: "source a.json" });
+  const a = await startVoiceCalibrationUi({ workspaceId: "workspace-a", dataDir: join(root, "data-a"), credentials: { env: envA }, wpmPath: "source a.json", mcpTransport: instanceTransport("workspace-a", join(root, "data-a", "mcp")) });
   t.after(() => a.close());
-  const b = await startVoiceCalibrationUi({ workspaceId: "workspace-b", dataDir: join(root, "data-b"), credentials: { env: envB }, wpmPath: pathB });
+  const b = await startVoiceCalibrationUi({ workspaceId: "workspace-b", dataDir: join(root, "data-b"), credentials: { env: envB }, wpmPath: pathB, mcpTransport: instanceTransport("workspace-b", join(root, "data-b", "mcp")) });
   t.after(() => b.close());
   envA.ELEVENLABS_API_KEY = "changed-a";
   envB.ELEVENLABS_API_KEY = "changed-b";
@@ -160,9 +213,26 @@ test("an explicit env file selects only its key", async (t) => {
   writeFileSync(wpmPath, "{}");
   ui = await startVoiceCalibrationUi({
     workspaceId: "workspace-file", dataDir: join(root, "data"), credentials: { envFile: "instance key.env" }, wpmPath,
+    mcpTransport: instanceTransport("workspace-file", join(root, "data", "mcp")),
   });
   const body = await (await fetch(`${ui.url}/api/v1/bootstrap`)).json();
   strictEqual(body.config.configured, true);
   strictEqual(body.observationSummary.sourceAvailable, true);
   strictEqual(JSON.stringify(body).includes("file-test-key"), false);
+});
+
+test("named launcher verifies the MCP binding and closes a rejected child before serving", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "calibration-binding-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const wpmPath = join(root, "wpm.json");
+  writeFileSync(wpmPath, "{}");
+  let closed = false;
+  const transport = instanceTransport("production", join(root, "state"));
+  transport.close = async () => { closed = true; };
+  await rejects(startVoiceCalibrationUi({
+    workspaceId: "staging", stateDir: join(root, "state"), dataDir: join(root, "ui"),
+    credentials: { env: { ELEVENLABS_API_KEY: "test-key" } }, wpmPath, mcpTransport: transport,
+  }), /MCP instance configuration mismatch/);
+  strictEqual(closed, true);
+  strictEqual(existsSync(join(root, "ui")), false);
 });

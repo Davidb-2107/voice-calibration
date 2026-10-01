@@ -41,6 +41,9 @@ writeFileSync(process.argv[2], JSON.stringify({
   key: process.env.ELEVENLABS_API_KEY ?? null,
   wpmPath: process.env.VOICE_WPM_PATH ?? null,
   marker: process.env.CALIBRATION_TEST_MARKER ?? null,
+  workspace: process.env.VOICE_CALIBRATION_WORKSPACE_ID ?? null,
+  state: process.env.VOICE_CALIBRATION_STATE_DIR ?? null,
+  gate: process.env.VOICE_CALIBRATION_GATE_DIR ?? null,
 }));
 for await (const line of createInterface({ input: process.stdin })) {
   const message = JSON.parse(line);
@@ -55,12 +58,18 @@ for await (const line of createInterface({ input: process.stdin })) {
     key: process.env.ELEVENLABS_API_KEY,
     wpm: process.env.VOICE_WPM_PATH,
     marker: process.env.CALIBRATION_TEST_MARKER,
+    workspace: process.env.VOICE_CALIBRATION_WORKSPACE_ID,
+    state: process.env.VOICE_CALIBRATION_STATE_DIR,
+    gate: process.env.VOICE_CALIBRATION_GATE_DIR,
   };
   t.after(() => {
     for (const [name, value] of Object.entries({
       ELEVENLABS_API_KEY: saved.key,
       VOICE_WPM_PATH: saved.wpm,
       CALIBRATION_TEST_MARKER: saved.marker,
+      VOICE_CALIBRATION_WORKSPACE_ID: saved.workspace,
+      VOICE_CALIBRATION_STATE_DIR: saved.state,
+      VOICE_CALIBRATION_GATE_DIR: saved.gate,
     })) {
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;
@@ -69,8 +78,11 @@ for await (const line of createInterface({ input: process.stdin })) {
   process.env.ELEVENLABS_API_KEY = "old-key";
   process.env.VOICE_WPM_PATH = join(root, "inherited.json");
   process.env.CALIBRATION_TEST_MARKER = "before";
+  process.env.VOICE_CALIBRATION_WORKSPACE_ID = "inherited";
+  process.env.VOICE_CALIBRATION_STATE_DIR = join(root, "inherited-state");
+  process.env.VOICE_CALIBRATION_GATE_DIR = join(root, "inherited-gate");
   const variants = [
-    { launch: { wpmPath: join(root, "source a.json") }, expected: join(root, "source a.json") },
+    { launch: { wpmPath: join(root, "source a.json"), workspaceId: "staging", stateDir: join(root, "selected-state") }, expected: join(root, "source a.json") },
     { launch: { wpmPath: undefined }, expected: null },
     { launch: undefined, expected: join(root, "inherited.json") },
   ];
@@ -88,6 +100,9 @@ for await (const line of createInterface({ input: process.stdin })) {
     deepStrictEqual(await transports[index].schema("selected-key", 5000), { type: "object" });
     deepStrictEqual(JSON.parse(readFileSync(join(root, `child-${index}.json`), "utf8")), {
       key: "selected-key", wpmPath: expected, marker: "before",
+      workspace: index === 0 ? "staging" : index === 1 ? null : "inherited",
+      state: join(root, index === 0 ? "selected-state" : "inherited-state"),
+      gate: index === 0 ? null : join(root, "inherited-gate"),
     });
   }
 });
@@ -244,6 +259,8 @@ test("bridge proposes through the core gate with the complete snapshot context",
   strictEqual(JSON.stringify(result).includes("secret"), false);
   strictEqual(calls[0].name, "propose_calibration");
   strictEqual(calls[0].args.workspace_id, "local-default");
+  strictEqual(calls[0].args.voice_id, resolvedRequest.voiceRef);
+  strictEqual(Object.hasOwn(calls[0].args, "dry_run"), false);
   strictEqual(calls[0].args.corpus_version_id, "standard-v1");
   strictEqual(calls[0].args.corpus_digest, "corpus-sha");
   deepStrictEqual(calls[0].args.text_source, resolvedRequest.params.text_source);

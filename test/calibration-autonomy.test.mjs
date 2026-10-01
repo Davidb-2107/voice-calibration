@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { test } from "node:test";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -29,6 +29,7 @@ test("standalone CLI exposes only the calibration surface", () => {
   match(result.stdout, /--workspace-id/);
   match(result.stdout, /--env-file/);
   match(result.stdout, /--wpm-path/);
+  match(result.stdout, /--state-dir/);
   doesNotMatch(result.stdout, /capcut-david|psycho-build/i);
 });
 
@@ -37,7 +38,7 @@ test("CLI validates named workspace configuration and flag values", () => {
   for (const args of [
     ["--workspace-id", "workspace-a"],
     ["--workspace-id", "Bad!"],
-    ["--workspace-id"], ["--env-file"], ["--wpm-path"],
+    ["--workspace-id"], ["--env-file"], ["--wpm-path"], ["--state-dir"],
   ]) {
     const result = spawnSync(process.execPath, [cli, ...args], { encoding: "utf8", cwd: root });
     strictEqual(result.status, 1, `${args.join(" ")}: ${result.stdout}`);
@@ -50,9 +51,33 @@ test("CLI serves a configured workspace and its selected WPM summary", async (t)
   const secret = "cli-smoke-secret";
   const envFile = join(temp, "instance.env");
   const wpmPath = join(temp, "source.json");
+  const fakeMcp = join(temp, "mcp.mjs");
+  const preload = join(temp, "preload.mjs");
+  writeFileSync(fakeMcp, `
+import { createInterface } from "node:readline";
+for await (const line of createInterface({ input: process.stdin })) {
+  const message = JSON.parse(line);
+  if (message.id === undefined) continue;
+  const result = message.method === "initialize"
+    ? { protocolVersion: "2025-11-25", capabilities: {} }
+    : message.method === "tools/list"
+    ? { tools: [{ name: "calibrate_voice", inputSchema: { type: "object" } }] }
+    : { content: [{ type: "text", text: JSON.stringify({ workspace_id: process.env.VOICE_CALIBRATION_WORKSPACE_ID, state_dir: process.env.VOICE_CALIBRATION_STATE_DIR }) }] };
+  process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }) + "\\n");
+}
+`);
+  writeFileSync(preload, `
+import childProcess from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+const originalSpawn = childProcess.spawn;
+childProcess.spawn = (command, args, options) => command === "voice-calibration-mcp"
+  ? originalSpawn(process.execPath, [${JSON.stringify(fakeMcp)}], options)
+  : originalSpawn(command, args, options);
+syncBuiltinESMExports();
+`);
   writeFileSync(envFile, `ELEVENLABS_API_KEY=${secret}\n`);
   writeFileSync(wpmPath, JSON.stringify({ "voice-cli": { observed_runs: [{ postproc: "raw", verified: true, words: 10, duration_s: 5 }] } }));
-  const child = spawn(process.execPath, [resolve(root, "dist/calibration-cli.js"),
+  const child = spawn(process.execPath, ["--import", pathToFileURL(preload).href, resolve(root, "dist/calibration-cli.js"),
     "--workspace-id", "workspace-cli", "--env-file", envFile, "--wpm-path", wpmPath,
     "--data-dir", join(temp, "data")], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
   let stdout = "";
