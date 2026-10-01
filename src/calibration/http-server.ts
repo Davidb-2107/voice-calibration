@@ -148,7 +148,8 @@ function assertRequestWorkspace(url: URL, body: Record<string, unknown> | undefi
   }
   for (const value of supplied) {
     assertWorkspaceId(value);
-    if (value !== workspaceId) throw new HttpError(400, "workspace_mismatch", "workspace does not match server instance");
+    if (value !== workspaceId)
+      throw new HttpError(400, "workspace_mismatch", "workspace does not match server instance");
   }
 }
 
@@ -284,7 +285,8 @@ async function dispatch(
       assertRequestWorkspace(url, body, workspaceId);
       const runId = idFromPath(url.pathname);
       const run = await application.execute(workspaceId, runId);
-      const failure = run.status === "failed" ? executionHttpError(await application.getReport(workspaceId, runId)) : null;
+      const failure =
+        run.status === "failed" ? executionHttpError(await application.getReport(workspaceId, runId)) : null;
       if (failure) throw failure;
       sendJson(response, 200, run);
       return;

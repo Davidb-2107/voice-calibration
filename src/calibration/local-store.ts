@@ -296,7 +296,11 @@ function makeRunRepository(dataDir: string, lockTimeoutMs: number): CalibrationR
     },
     async save(run) {
       assertWorkspaceId(run.workspaceId);
-      await withFileLock(pathFor(run.workspaceId, run.id), () => writeJson(pathFor(run.workspaceId, run.id), run), lockTimeoutMs);
+      await withFileLock(
+        pathFor(run.workspaceId, run.id),
+        () => writeJson(pathFor(run.workspaceId, run.id), run),
+        lockTimeoutMs,
+      );
     },
     async list(workspaceId) {
       const root = join(workspaceRoot(dataDir, workspaceId), "runs");
