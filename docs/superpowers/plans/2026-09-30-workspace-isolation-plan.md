@@ -1,6 +1,8 @@
 # Workspace Isolation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+**Statut :** implémenté, revu et fusionné dans `main` le 2026-10-01 via la [PR #4](https://github.com/Davidb-2107/voice-calibration/pull/4), commit de fusion `2910c6e`.
+
+Les cases cochées indiquent les étapes réalisées. Le détail ci-dessous conserve la séquence d'implémentation ; le bilan final figure dans la section « Réalisation et intégration ».
 
 **Goal:** Isoler les données et commandes locales par workspace tout en conservant le parcours et les fichiers de `local-default`.
 
@@ -20,8 +22,8 @@
 - Aucun hébergement, authentification, base de données, stockage objet, worker, sélecteur UI ou nouveau drapeau CLI dans cette étape.
 - Les credentials et le WPM canonique restent globaux ; cette étape ne permet pas une exposition SaaS multi-utilisateur.
 - Utiliser Git Bash pour les commandes. Exécuter les vérifications avec de faux credentials et transports ; aucun appel ElevenLabs réel.
-- **Consigne utilisateur : aucun commit ni push**, pendant la préparation ou l'exécution de ce plan, sauf nouvelle demande explicite. Les étapes de commit de la skill sont remplacées par une inspection du diff.
-- Ce document prépare l'implémentation ; sa création n'autorise pas encore l'exécution. Examiner le plan et choisir la méthode avant de modifier le code.
+- **Consigne initiale : aucun commit ni push** pendant la préparation et l'exécution isolée. Les étapes de commit de la skill ont été remplacées par une inspection du diff. L'intégration locale, les commits, le push et la fusion ont ensuite été autorisés explicitement par l'utilisateur.
+- L'exécution a été autorisée après validation du design et invocation de `superpowers:subagent-driven-development`. Les trois tâches ont été réalisées séquentiellement dans un worktree isolé, avec revues indépendantes.
 
 ## Review Focus
 
@@ -66,7 +68,7 @@ Base observée lors de la préparation : `d339a84`. Avant exécution, inspecter 
 - Produces: option programmatique `CalibrationUiOptions.workspaceId?: string` ; sa transmission au serveur ne modifie pas la CLI.
 - Consumes: contrats actuels des dépôts, encore inchangés à cette tâche.
 
-- [ ] **Step 1: Ajouter le test du contrat au fichier de domaine.** Importer les deux nouveaux exports et les assertions nécessaires :
+- [x] **Step 1: Ajouter le test du contrat au fichier de domaine.** Importer les deux nouveaux exports et les assertions nécessaires :
 
 ```js
 test("workspace IDs have one canonical spelling", () => {
@@ -79,9 +81,9 @@ test("workspace IDs have one canonical spelling", () => {
 });
 ```
 
-- [ ] **Step 2: Vérifier l'échec avant implémentation.** Depuis la racine du dépôt, Git Bash : `npm run build && node --test test/calibration-domain.test.mjs`. Attendre un échec lié aux nouveaux exports absents.
+- [x] **Step 2: Vérifier l'échec avant implémentation.** Depuis la racine du dépôt, Git Bash : `npm run build && node --test test/calibration-domain.test.mjs`. Attendre un échec lié aux nouveaux exports absents.
 
-- [ ] **Step 3: Ajouter la validation commune dans `domain.ts`.**
+- [x] **Step 3: Ajouter la validation commune dans `domain.ts`.**
 
 ```ts
 export class InvalidWorkspaceIdError extends Error {
@@ -99,7 +101,7 @@ export function assertWorkspaceId(value: unknown): asserts value is string {
 }
 ```
 
-- [ ] **Step 4: Ajouter les tests de refus avant I/O.** Dans les tests de stockage, utiliser un sous-répertoire absent d'un répertoire temporaire nettoyé avec `t.after` :
+- [x] **Step 4: Ajouter les tests de refus avant I/O.** Dans les tests de stockage, utiliser un sous-répertoire absent d'un répertoire temporaire nettoyé avec `t.after` :
 
 ```js
 test("noncanonical workspace is rejected before storage IO", async (t) => {
@@ -134,7 +136,7 @@ test("invalid workspace is rejected before application IO or server start", asyn
 
 La construction de l'application lit les propriétés `runs.list` et `runs.recoverRunning` mais n'appelle pas leurs fonctions ; le Proxy ci-dessus autorise cette vérification de forme. Ajouter aussi un test `startVoiceCalibrationUi({ workspaceId: "WORKSPACE-A" })` qui refuse avant création des credentials ; importer le lanceur depuis `dist/calibration/entrypoint.js`.
 
-- [ ] **Step 5: Brancher la validation aux frontières.** Commencer `workspaceRoot` par `assertWorkspaceId(workspaceId)`. Valider `run.workspaceId` au début de `runs.create/save`, et `profile.workspaceId` avant toute écriture de profil. Au début de `corpus.saveDraft`, valider aussi `draft.workspaceId` et son égalité avec le workspace attendu, avant la queue et le verrou :
+- [x] **Step 5: Brancher la validation aux frontières.** Commencer `workspaceRoot` par `assertWorkspaceId(workspaceId)`. Valider `run.workspaceId` au début de `runs.create/save`, et `profile.workspaceId` avant toute écriture de profil. Au début de `corpus.saveDraft`, valider aussi `draft.workspaceId` et son égalité avec le workspace attendu, avant la queue et le verrou :
 
 ```ts
 assertWorkspaceId(workspaceId);
@@ -153,7 +155,7 @@ async prepareDryRun(input: CalibrationInput): Promise<CalibrationRun> {
 
 Dans `entrypoint.ts`, ajouter `workspaceId?: string`, résoudre/valider cette valeur au tout début de `startVoiceCalibrationUi`, avant `createCredentialProvider()`, puis la transmettre à `startCalibrationUi`. Valider la configuration aussi dans `createCalibrationServer` et au début de `startCalibrationUi`. Dans `dispatch`, déplacer la résolution/validation du workspace à l'intérieur du `try` ; mapper `InvalidWorkspaceIdError` vers 400 et son code dans `statusForError`/`errorPayload`.
 
-- [ ] **Step 6: Vérifier la tâche et inspecter le diff.** `npm run build && npm run typecheck && node --test test/calibration-domain.test.mjs test/calibration-storage.test.mjs test/calibration-api.test.mjs`. Attendre le succès. Examiner `git diff --check` et `git diff --stat` ; aucun commit.
+- [x] **Step 6: Vérifier la tâche et inspecter le diff.** `npm run build && npm run typecheck && node --test test/calibration-domain.test.mjs test/calibration-storage.test.mjs test/calibration-api.test.mjs`. Attendre le succès. Examiner `git diff --check` et `git diff --stat` ; aucun commit.
 
 ### Task 2: Propager le workspace dans tout le parcours local
 
@@ -186,7 +188,7 @@ reconcile(workspaceId: string, runId: string): Promise<CalibrationRun>;
 publishProfile(workspaceId: string, runId: string): Promise<VoiceProfile>;
 ```
 
-- [ ] **Step 1: Ajouter une preuve de partition dans les tests de stockage réels.** Conserver `runFixture`, compléter son approbation et ajouter les imports nécessaires. Ce test vérifie aussi la collision d'ID et la consommation atomique :
+- [x] **Step 1: Ajouter une preuve de partition dans les tests de stockage réels.** Conserver `runFixture`, compléter son approbation et ajouter les imports nécessaires. Ce test vérifie aussi la collision d'ID et la consommation atomique :
 
 ```js
 test("workspaces partition every local resource", async (t) => {
@@ -227,9 +229,9 @@ test("workspaces partition every local resource", async (t) => {
 });
 ```
 
-- [ ] **Step 2: Exécuter le nouveau test avant modification.** `npm run build && node --test --test-name-pattern="workspaces partition" test/calibration-storage.test.mjs`. Attendre un échec de partition/signature avec le stockage actuel.
+- [x] **Step 2: Exécuter le nouveau test avant modification.** `npm run build && node --test --test-name-pattern="workspaces partition" test/calibration-storage.test.mjs`. Attendre un échec de partition/signature avec le stockage actuel.
 
-- [ ] **Step 3: Changer les contrats et chemins de stockage.** Appliquer les signatures ci-dessus dans `ports.ts`. Utiliser cette fonction dans le dépôt de runs pour toutes les opérations, sans toucher aux verrous existants :
+- [x] **Step 3: Changer les contrats et chemins de stockage.** Appliquer les signatures ci-dessus dans `ports.ts`. Utiliser cette fonction dans le dépôt de runs pour toutes les opérations, sans toucher aux verrous existants :
 
 ```ts
 const pathFor = (workspaceId: string, id: string) =>
@@ -259,7 +261,7 @@ return new Uint8Array(await readFile(target));
 
 Mettre à jour les appels existants de `calibration-storage.test.mjs` avec `"local-default"` en premier argument. Conserver ses assertions exactes de layout, traversée et symlink. Ajouter les appels directs avec workspace invalide à `runs.get/list/recoverRunning/consumeApproval` et `artifacts.put/get` ; tous doivent refuser avant création de répertoire.
 
-- [ ] **Step 4: Propager le contexte dans l'application avant reprise.** Modifier les six signatures publiques et `getRunOrThrow`. Valider le workspace au début de chaque méthode ; le verrou par run utilise `JSON.stringify([workspaceId, runId])` au lieu de `runId` seul. Employer la séquence suivante dans `getRun` avant le bloc existant de projection MCP :
+- [x] **Step 4: Propager le contexte dans l'application avant reprise.** Modifier les six signatures publiques et `getRunOrThrow`. Valider le workspace au début de chaque méthode ; le verrou par run utilise `JSON.stringify([workspaceId, runId])` au lieu de `runId` seul. Employer la séquence suivante dans `getRun` avant le bloc existant de projection MCP :
 
 ```ts
 assertWorkspaceId(workspaceId);
@@ -281,7 +283,7 @@ await this.repositories.runs.recoverRunning(workspaceId, run.id, recoveredAt);
 await this.repositories.runs.consumeApproval(workspaceId, run.id, consumedAt);
 ```
 
-- [ ] **Step 5: Adapter les doubles et tous les callers existants.** Dans `memoryRepositories`, les maps de runs sont indexées par `JSON.stringify([workspaceId, id])`, les profils sont filtrés par workspace et les artefacts incluent ce workspace dans la référence et la clé. Exemple :
+- [x] **Step 5: Adapter les doubles et tous les callers existants.** Dans `memoryRepositories`, les maps de runs sont indexées par `JSON.stringify([workspaceId, id])`, les profils sont filtrés par workspace et les artefacts incluent ce workspace dans la référence et la clé. Exemple :
 
 ```js
 const runKey = (workspaceId, id) => JSON.stringify([workspaceId, id]);
@@ -321,7 +323,7 @@ strictEqual(inputValue.workspaceId, workspaceId);
 
 Ajouter `inputValue` aux signatures des méthodes qui n'avaient pas de paramètre et inclure `workspaceId` dans le retour de `propose`. Conserver les compteurs existants et le chemin legacy de `fakeBridge` : ce dernier ne stocke aucun record par workspace et transporte une requête déjà résolue.
 
-- [ ] **Step 6: Fixer le workspace HTTP et contrôler toutes les identités fournies.** Capturer une copie des options avec le workspace validé dans `createCalibrationServer` avant de créer le callback, afin qu'une mutation ultérieure des options ne change pas l'identité de l'instance. Remplacer la sélection par query par ce contrôle :
+- [x] **Step 6: Fixer le workspace HTTP et contrôler toutes les identités fournies.** Capturer une copie des options avec le workspace validé dans `createCalibrationServer` avant de créer le callback, afin qu'une mutation ultérieure des options ne change pas l'identité de l'instance. Remplacer la sélection par query par ce contrôle :
 
 ```ts
 function assertRequestWorkspace(url: URL, body: Record<string, unknown> | undefined, workspaceId: string): void {
@@ -345,7 +347,7 @@ const run = await application.prepareDryRun({ ...input, workspaceId } as never);
 
 Retirer `workspaceId: "local-default"` du corps envoyé par le navigateur. Compléter le test client existant pour vérifier l'absence de cette propriété dans la requête capturée.
 
-- [ ] **Step 7: Prouver le refus avant reprise sur un stockage réel.** Ajouter `readFileSync`, `readdirSync` aux imports API et cette capture sans écriture :
+- [x] **Step 7: Prouver le refus avant reprise sur un stockage réel.** Ajouter `readFileSync`, `readdirSync` aux imports API et cette capture sans écriture :
 
 ```js
 function snapshotFiles(root) {
@@ -437,7 +439,7 @@ strictEqual(await badApp.getRun("workspace-a", runB.id), null);
 strictEqual(await badApp.getReport("workspace-a", runB.id), null);
 ```
 
-- [ ] **Step 8: Tester les identités HTTP cachées et invalides.** Ajouter ce test complet ; chaque demande reçoit le code attendu et laisse le snapshot inchangé :
+- [x] **Step 8: Tester les identités HTTP cachées et invalides.** Ajouter ce test complet ; chaque demande reçoit le code attendu et laisse le snapshot inchangé :
 
 ```js
 test("HTTP checks every supplied workspace identity", async (t) => {
@@ -490,7 +492,7 @@ for (const [method, path, value, code] of cases) {
 
 Pour un corps direct ou imbriqué égal au serveur, le parcours positif de l'étape suivante démontre l'acceptation. Ajouter aussi au test de refus avant I/O de tâche 1 `store.corpus.saveDraft("workspace-a", { workspaceId: "WORKSPACE-A", revision: 0, items: [] }, 0)` ; le répertoire absent reste absent.
 
-- [ ] **Step 9: Vérifier le parcours complet dans deux workspaces et les anciens rapports.** Remplacer la déclaration du test E2E principal par ces deux lignes et ajouter la fermeture du `for` après sa fermeture actuelle :
+- [x] **Step 9: Vérifier le parcours complet dans deux workspaces et les anciens rapports.** Remplacer la déclaration du test E2E principal par ces deux lignes et ajouter la fermeture du `for` après sa fermeture actuelle :
 
 ```js
 for (const workspaceId of ["local-default", "workspace-a"]) {
@@ -517,7 +519,7 @@ deepStrictEqual(JSON.parse(Buffer.from(await reloaded.artifacts.get("local-defau
 await rejects(reloaded.artifacts.get("workspace-a", ref), /invalid artifact reference/);
 ```
 
-- [ ] **Step 10: Mettre les contrats locaux dans la documentation et vérifier l'ensemble.** Ajouter à `calibration-architecture.md` le paragraphe ci-dessous et la nouvelle signature des ports ; adapter le tableau de layout pour montrer `workspaces/<workspace-id>/` et préciser que `local-default` conserve ses fichiers. Dans README, documenter l'option programmatique uniquement :
+- [x] **Step 10: Mettre les contrats locaux dans la documentation et vérifier l'ensemble.** Ajouter à `calibration-architecture.md` le paragraphe ci-dessous et la nouvelle signature des ports ; adapter le tableau de layout pour montrer `workspaces/<workspace-id>/` et préciser que `local-default` conserve ses fichiers. Dans README, documenter l'option programmatique uniquement :
 
 ```md
 Une instance locale appartient au workspace fixé à son démarrage (`local-default` par défaut).
@@ -537,7 +539,7 @@ Exécuter `npm run build && npm run typecheck && npm test && npm run lint`, puis
 - Consumes: signatures applicatives de tâche 2 et `assertWorkspaceId` de tâche 1.
 - Produces: helper privé `parseScopedCoreRun(value: unknown, workspaceId: string): CoreRunRecord`. Les signatures publiques de `CalibrationBridge` restent identiques.
 
-- [ ] **Step 1: Ajouter une matrice de six réponses étrangères.** Réutiliser `resolvedRequest` et les imports du fichier bridge ; le transport ci-dessous ne lance aucun processus :
+- [x] **Step 1: Ajouter une matrice de six réponses étrangères.** Réutiliser `resolvedRequest` et les imports du fichier bridge ; le transport ci-dessous ne lance aucun processus :
 
 ```js
 test("bridge rejects foreign workspace records in every core operation", async () => {
@@ -569,9 +571,9 @@ test("bridge rejects foreign workspace records in every core operation", async (
 });
 ```
 
-- [ ] **Step 2: Constater l'échec.** `npm run build && node --test --test-name-pattern="foreign workspace records" test/calibration-bridge.test.mjs`. Attendre un échec « missing expected rejection » avec l'implémentation actuelle.
+- [x] **Step 2: Constater l'échec.** `npm run build && node --test --test-name-pattern="foreign workspace records" test/calibration-bridge.test.mjs`. Attendre un échec « missing expected rejection » avec l'implémentation actuelle.
 
-- [ ] **Step 3: Centraliser le contrôle avant extraction.** Importer `assertWorkspaceId` depuis `domain.ts`, puis ajouter :
+- [x] **Step 3: Centraliser le contrôle avant extraction.** Importer `assertWorkspaceId` depuis `domain.ts`, puis ajouter :
 
 ```ts
 function parseScopedCoreRun(value: unknown, workspaceId: string): CoreRunRecord {
@@ -584,7 +586,7 @@ function parseScopedCoreRun(value: unknown, workspaceId: string): CoreRunRecord 
 
 Dans les six opérations `propose/approve/getRun/execute/reconcile/publish`, valider le workspace d'entrée avant `invokeTool`, puis remplacer leur appel à `parseCoreRun(redact(...))` par `parseScopedCoreRun(redact(...), input.workspaceId)`. Dans `execute` et `reconcile`, ce contrôle s'applique à la branche core-backed où `workspaceId` et `coreRunId` sont présents ; garder le chemin legacy existant. Dans `publish`, effectuer le contrôle avant `resultObject(run.result).publication`, car `PublicationResult` ne transporte plus le workspace.
 
-- [ ] **Step 4: Vérifier que la publication étrangère ne produit aucun profil local.** Dans les tests API, ajouter les imports `createCalibrationBridge` et `createCredentialProvider`. Utiliser un vrai `createLocalStore` temporaire et un faux transport ; préparer un run réussi legacy avec les helpers existants, puis faire retourner par `publish_calibration` un record étranger confirmé :
+- [x] **Step 4: Vérifier que la publication étrangère ne produit aucun profil local.** Dans les tests API, ajouter les imports `createCalibrationBridge` et `createCredentialProvider`. Utiliser un vrai `createLocalStore` temporaire et un faux transport ; préparer un run réussi legacy avec les helpers existants, puis faire retourner par `publish_calibration` un record étranger confirmé :
 
 ```js
 test("foreign MCP publication never verifies or saves a local profile", async (t) => {
@@ -626,7 +628,7 @@ test("foreign MCP publication never verifies or saves a local profile", async (t
 
 Le run préparé par `fakeBridge` garde un digest legacy : sa lecture ne déclenche pas `get_calibration_run`, ce qui concentre ce test sur la publication réelle du pont. Les tests core-backed existants continuent à valider les réponses correctes.
 
-- [ ] **Step 5: Documenter la limite et terminer la vérification.** Ajouter à `calibration-architecture.md` :
+- [x] **Step 5: Documenter la limite et terminer la vérification.** Ajouter à `calibration-architecture.md` :
 
 ```md
 Le pont refuse tout record MCP dont le workspace ne correspond pas à l'appel, y compris
@@ -637,6 +639,22 @@ il ne peut pas annuler une action déjà exécutée par le cœur MCP externe.
 
 Exécuter une fois après les derniers changements `npm run build && npm run typecheck && npm test && npm run lint`, puis `git diff --check` et `git status --short`. Inspecter le diff des fichiers listés et conserver les changements d'autres intervenants. Aucun commit, push ou appel provider réel. Toute panne d'environnement doit être rapportée avec la commande et son résultat ; ne pas remplacer une vérification échouée par une affirmation de succès.
 
-## Handoff
+## Réalisation et intégration
 
-Après relecture et choix de la méthode, les trois tâches s'exécutent séquentiellement, car elles partagent les contrats et les fichiers. La méthode **Native** est recommandée pour ce plan : elle garde ces changements de signatures dans un seul contexte, puis soumet le résultat complet à une revue indépendante. Les instructions de la skill d'exécution choisie seront lues au moment de l'exécution ; ce document ne déclenche pas d'agent ni d'implémentation.
+Les trois tâches et leurs 21 étapes sont terminées : validation canonique avant I/O, propagation du workspace dans le parcours local et rejet des records MCP étrangers. Chaque tâche a été revue indépendamment. La revue finale a identifié deux contournements supplémentaires, corrigés et relus : le workspace `null` au démarrage et les valeurs invalides fournies au pont avant sélection du chemin core ou legacy.
+
+La correction préexistante de découverte commune du vault a été conservée et isolée dans un commit distinct. L'intégration comprend :
+
+- `e29f255` : découverte commune du vault pour les credentials et le launcher, avec test hors du vault.
+- `a6c6e43` : isolation des workspaces, spécification et plan.
+- `aa62592` : trois ajustements de formatage dans deux fichiers, après le premier check CI.
+
+La [PR #4](https://github.com/Davidb-2107/voice-calibration/pull/4) a été fusionnée dans `main` le 2026-10-01, au commit `2910c6e`. La [CI après fusion](https://github.com/Davidb-2107/voice-calibration/actions/runs/36825972573) a réussi, y compris le contrôle Biome complet, typecheck, build, `npm test` et le scan de secrets.
+
+### Validation et limite de l'environnement local
+
+Le résultat intégré a passé build, typecheck, lint et les 103 cas des neuf fichiers de tests du projet via `npm test -- "test/*.test.mjs"`. Dans le checkout Windows utilisé pour l'intégration, `npm test` sans ciblage découvrait aussi deux scripts tiers Windows dans un ancien environnement Python sous `temp/`, avec les erreurs `ScriptEngine is not defined` et `WScript is not defined`. Cette anomalie locale a été rapportée ; aucune configuration n'a été modifiée pour la masquer. La CI sur checkout propre a passé la commande `npm test` normale.
+
+### Périmètre terminé
+
+Cette livraison couvre l'isolation locale, avec un workspace fixé par instance et la compatibilité de `local-default`. Les credentials ElevenLabs et le WPM canonique restent globaux. L'authentification, les autorisations, les credentials par utilisateur, la base de données, le stockage objet, les workers et l'API publique du moteur restent hors périmètre et nécessitent des travaux SaaS distincts.

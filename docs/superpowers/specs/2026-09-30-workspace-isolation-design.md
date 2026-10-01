@@ -2,19 +2,20 @@
 
 **Date :** 2026-09-30
 
-**Statut :** design validé en conversation ; revue indépendante intégrée ; spécification à relire
+**Statut :** implémenté, revu et fusionné dans `main` le 2026-10-01 via la [PR #4](https://github.com/Davidb-2107/voice-calibration/pull/4), commit `2910c6e`.
+
 **Dépôt :** `voice-calibration`
 
 ## Objectif
 
 Rendre cohérente l'identité du workspace dans le serveur HTTP, l'application et la persistance locale. Cette première étape prépare un futur SaaS multi-utilisateur tout en conservant le lanceur et les données de `local-default`. Elle ne rend pas le service actuel apte à être exposé à plusieurs utilisateurs.
 
-## Constat
+## Constat initial avant implémentation
 
-- Le serveur lit `workspaceId` dans la requête pour certaines routes (`src/calibration/http-server.ts`), tandis que le client envoie `local-default` dans le corps du dry-run (`src/ui/calibration-client.ts`).
-- Les corpus et profils sont rangés par workspace. Les chemins des runs et artefacts sont fixés à `workspaces/local-default/` (`src/calibration/local-store.ts`).
-- Les commandes sur un run reçoivent son seul ID ; `CalibrationApplication` ne vérifie pas que le run appartient au workspace de la requête.
-- Les tests couvrent le parcours local, mais pas l'accès croisé entre deux workspaces.
+- Le serveur lisait `workspaceId` dans la requête pour certaines routes (`src/calibration/http-server.ts`), tandis que le client envoyait `local-default` dans le corps du dry-run (`src/ui/calibration-client.ts`).
+- Les corpus et profils étaient rangés par workspace. Les chemins des runs et artefacts étaient fixés à `workspaces/local-default/` (`src/calibration/local-store.ts`).
+- Les commandes sur un run recevaient son seul ID ; `CalibrationApplication` ne vérifiait pas que le run appartenait au workspace de la requête.
+- Les tests couvraient le parcours local, mais pas l'accès croisé entre deux workspaces.
 
 ## Contrat du serveur local
 
@@ -40,7 +41,7 @@ Les IDs de run restent validés comme segments de chemin ; les IDs de workspace 
 
 La disposition actuelle sous `workspaces/local-default/` et les références de rapport déjà enregistrées restent lisibles. Aucune migration ou copie de ces données n'est requise. Le lanceur sans option et l'UI actuelle continuent à ouvrir le même workspace et à suivre le même parcours de calibration. Les appels programmatiques qui envoyaient explicitement `local-default` restent acceptés ; ceux qui envoyaient un workspace différent à une instance liée à `local-default` reçoivent désormais l'erreur explicite ci-dessus. Un ancien nom de workspace non conforme au contrat canonique est rejeté ; il n'est ni normalisé ni renommé automatiquement.
 
-## Vérification attendue
+## Critères d'acceptation validés
 
 1. Un test utilisant `createLocalStore` crée corpus, runs, profils et artefacts dans deux workspaces et confirme que chacun est retrouvé uniquement dans le sien. Les doubles de dépôts utilisés ailleurs respectent aussi le workspace ; un stockage en mémoire qui l'ignore ne suffit pas à valider l'isolation.
 2. Un test de collision de casse vérifie que `workspace-a` est accepté et que `WORKSPACE-A` est rejeté avant toute I/O. Il couvre la configuration du serveur, les entrées HTTP et les appels directs applicatifs ou de dépôts.
@@ -49,6 +50,12 @@ La disposition actuelle sous `workspaces/local-default/` et les références de 
 5. Un faux transport MCP retourne une publication confirmée appartenant à un autre workspace. Le pont la refuse avant extraction ; aucune vérification canonique ni écriture de profil local ne suit. Les contrôles de workspace des autres opérations MCP sont également vérifiés.
 6. Un parcours HTTP complet réussit dans un workspace canonique différent de `local-default`, avec un stockage local réellement partitionné. Les tests du parcours `local-default` et de reprise après redémarrage restent valides, y compris pour les rapports existants.
 7. Les vérifications utilisent un faux pont ou un faux transport et de faux credentials ; aucun appel facturable à ElevenLabs n'est nécessaire.
+
+## Réalisation et validation
+
+Les trois tâches du [plan d'implémentation](../plans/2026-09-30-workspace-isolation-plan.md) sont terminées et ont fait l'objet de revues indépendantes. Les deux constats de la revue finale ont été corrigés et relus : `null` ne sélectionne plus silencieusement `local-default` au démarrage ; le pont rejette toute identité fournie invalide avant accès aux credentials ou au transport, y compris sur le chemin legacy.
+
+Le résultat intégré a passé build, typecheck, lint et les 103 cas des tests du projet. La [CI du commit fusionné](https://github.com/Davidb-2107/voice-calibration/actions/runs/36825972573) a réussi sur un checkout propre, avec contrôle de formatage complet et `npm test` sans ciblage. Le bilan du plan documente séparément les deux scripts tiers sous `temp/` qui perturbaient la découverte automatique des tests dans le checkout Windows local.
 
 ## Hors périmètre
 
