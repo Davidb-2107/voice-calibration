@@ -20,7 +20,7 @@
   ],
   "scripts": {
     "build": "node scripts/clean-dist.mjs && tsc && node scripts/build-calibration-ui.mjs",
-    "test": "node --test --test-reporter=spec",
+    "test": "cd test && node --test --test-reporter=spec",
     "typecheck": "tsc --noEmit",
     "lint": "biome ci --formatter-enabled=false .",
     "dev": "npm run build && node dist/calibration-cli.js --open",
