@@ -1,11 +1,15 @@
 # ElevenLabs Calibration Contract Inventory
 
-**Captured:** 2026-09-02
-**Gate status:** passed for the MVP bridge, with the constraints below
+**Captured:** 2026-09-02; instance configuration verified 2026-10-01
+**Gate status:** Node bridge and Python candidate verified locally; integration pending
 
-This document is the provider-specific source for Tasks 2–7. It records what
-was observed in the shared Python package; it is not a second calibration
-contract.
+The evidence table and hashes below preserve the 2026-09-02 capture. Current
+instance behavior uses the namespaced Python package `voice-calibration` 0.2.0
+and the entrypoint `voice_calibration.mcp_server.server:main`. Its
+`VOICE_WPM_PATH` change is in the separate local vault-session worktree
+`mcp-python-instance-configuration`, not in the installed package. A process
+specific `PYTHONPATH` selected that candidate for a two-instance schema smoke;
+neither global activation nor a provider call was made.
 
 ## Evidence and source revision
 
@@ -14,7 +18,7 @@ contract.
 | Source checkout | `Shared/voice-calibration/` in the `Wiki_Claude` vault |
 | Source repository | `Wiki_Claude` vault Git repository; `Shared/voice-calibration/` is a tracked directory, not a standalone Git checkout |
 | Capture ref | `2eedac32fd3f4275e58ca8510d0d49be0b589f96`, the vault repository HEAD observed at capture time; this is not a revision of `voice-calibration/` alone |
-| Package | `voice-calibration` version `0.1.0`, Python `>=3.11` |
+| Package at original capture | `voice-calibration` version `0.1.0`, Python `>=3.11` |
 | Authoritative README | `Shared/voice-calibration/README.md`, read with the enabled Obsidian CLI |
 | Contract models | `Shared/voice-calibration/core/contracts.py` |
 | Orchestration | `Shared/voice-calibration/core/calibration.py` |
@@ -62,13 +66,16 @@ The claim-to-source index used for this inventory is:
 
 ## Package and MCP entrypoint
 
-`pyproject.toml` declares these runtime dependencies: `pydantic>=2,<3`,
-`requests==2.34.2`, `filelock==3.32.0` and `mcp==1.29.0`. The installed console
-entrypoint is:
+At the original capture, `pyproject.toml` declared these runtime dependencies:
+`pydantic>=2,<3`, `requests==2.34.2`, `filelock==3.32.0` and `mcp==1.29.0`.
+The original console entrypoint was:
 
 ```text
 voice-calibration-mcp = mcp_server.server:main
 ```
+
+The verified 0.2.0 installation uses
+`voice-calibration-mcp = voice_calibration.mcp_server.server:main`.
 
 The redacted `Shared/.mcp.json` entry is:
 
@@ -88,7 +95,7 @@ server-side before spawning the command.
 
 ## Transport and lifecycle
 
-`mcp_server/server.py` creates `FastMCP("voice-calibration")` and calls
+The original `mcp_server/server.py` creates `FastMCP("voice-calibration")` and calls
 `mcp.run(transport="stdio")`. The existing `test_mcp_server.py` verifies the
 installed console entrypoint with `mcp.client.stdio.StdioServerParameters` and
 `stdio_client`, from an unrelated current working directory. The bridge must
@@ -299,13 +306,24 @@ derive from an explicit bridge contract; otherwise `artifacts` remains empty.
 
 ## Canonical WPM authority and `canonicalRef`
 
-The core imports `Shared/voice-calibration/voice_wpm.py` and uses the sibling
-files:
+The original 0.1.0 capture used `Shared/voice-calibration/voice_wpm.py` and
+the sibling files:
 
 ```text
 WPM_PATH       = Shared/voice-calibration/voice_wpm.json
 RUNS_LOG_PATH  = Shared/voice-calibration/runs.jsonl
 ```
+
+In the namespaced 0.2.0 candidate, an explicit `VOICE_WPM_PATH` is resolved
+and validated at module import. Missing, unreadable or invalid JSON fails
+without a fallback. Each workspace context replaces only `state.corpus` and
+`state.runs_log`; its root, gate and battery cache paths remain as before.
+For a custom corpus, the journal is `<wpm-path>.runs.jsonl`; the historical
+corpus keeps `runs.jsonl`. The context aware read/write paths and file locks
+follow those selected files. Existing contexts do not change when the process
+environment changes later. Default paths remain selected when the override is
+absent. A custom canonical reference is a file URI with an encoded fragment;
+the historical source retains the relative reference below.
 
 `voice_wpm.json` is the source of truth. `runs.jsonl` is append-only audit
 history and is not the value consumed by duration gates. `voice_wpm.get_profile`
@@ -345,16 +363,20 @@ because calling it would bypass the measured `run_calibration` workflow.
 ## Environment and secrets
 
 The core reads `ELEVENLABS_API_KEY` from `os.environ`; the MCP adapter itself
-does not load `.env`. The existing CLI adapter’s convention is:
+does not load `.env`. The 0.1.0 CLI adapter’s historical convention was:
 
 1. explicit `--env-file` when supplied;
 2. an already-set `ELEVENLABS_API_KEY`;
 3. central `Wiki_Claude/Projects/.env`;
 4. `Projects/*/.env` and `Projects/*/elevenlabs-mcp-server/.env` in sorted order.
 
-Its loader accepts simple `KEY=VALUE` lines, ignores blanks/comments and uses
-`os.environ.setdefault`. The local UI backend owns this loading/resolution and
-passes the resulting environment only to the child process. It never sends
+The current Node UI backend resolves explicit `credentials.envFile` or
+`credentials.env` strictly before startup and snapshots the selected key. A
+named workspace requires an explicit credential source and WPM path. The
+historical discovery remains for `local-default`; explicit sources never fall
+back to it. The same selected key goes to the voice directory and each MCP
+child; the selected WPM path goes to the child as `VOICE_WPM_PATH` and to the
+Node canonical reader. The backend never sends
 the key to the browser, stores it in a request snapshot, or writes it to logs,
 reports, artifacts or error strings.
 

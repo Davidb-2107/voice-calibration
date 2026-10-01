@@ -31,6 +31,9 @@ capcut-david calibration-ui --open
 Options utiles :
 
 ```text
+--workspace-id <id>   workspace fixe de l'instance
+--env-file <file>     fichier .env ElevenLabs de l'instance
+--wpm-path <file>     fichier JSON WPM canonique de l'instance
 --data-dir <dir>       stockage local des runs et profils
 --host <host>          adresse d’écoute
 --port <port>          port d’écoute (0 = port libre)
@@ -46,17 +49,42 @@ Une instance locale appartient au workspace fixé à son démarrage (`local-defa
 Les appels HTTP ne peuvent pas sélectionner un autre workspace. Les IDs utilisent uniquement
 les minuscules ASCII, chiffres, tirets et underscores. Les runs et artefacts sont vérifiés dans
 ce contexte avant toute reprise ou opération. Les credentials ElevenLabs et le WPM canonique
-restent globaux ; cette isolation locale ne suffit pas pour un SaaS multi-utilisateur.
+peuvent être sélectionnés par instance au démarrage.
 
-L'option programmatique `workspaceId` du lanceur public permet de fixer cette identité :
+Pour un workspace nommé, les deux sources explicites sont obligatoires et aucun repli
+vers la clé globale ou le WPM historique n'est effectué :
+
+```bash
+node dist/calibration-cli.js --workspace-id atelier-a \
+  --env-file C:/calibration/atelier-a/.env \
+  --wpm-path C:/calibration/atelier-a/voice_wpm.json --open
+```
+
+Le lanceur public accepte les mêmes options :
 
 ```js
 import { startVoiceCalibrationUi } from "voice-calibration";
-const ui = await startVoiceCalibrationUi({ workspaceId: "workspace-a" });
+const ui = await startVoiceCalibrationUi({
+  workspaceId: "atelier-a",
+  credentials: { envFile: "C:/calibration/atelier-a/.env" },
+  wpmPath: "C:/calibration/atelier-a/voice_wpm.json",
+});
 ```
 
 Sans option, les données et références existantes sous `workspaces/local-default/`
-restent lisibles sans migration. Le navigateur utilise le workspace de l'instance.
+restent lisibles sans migration ; la découverte historique des sources demeure active.
+Le navigateur utilise le workspace de l'instance. La clé, la source WPM et le
+workspace sont figés pour le processus : redémarrez pour les changer. Chaque
+nouveau run conserve une empreinte de cette configuration ; après un changement
+de clé ou de chemin WPM, les anciens runs et rapports restent consultables mais
+leurs mutations renvoient `409 configuration_mismatch`. Un run antérieur sans
+empreinte renvoie `409 configuration_identity_missing` lors d'une mutation.
+Modifier seulement le contenu du fichier WPM ne change pas l'empreinte.
+
+Le correctif Python qui applique `VOICE_WPM_PATH` est actuellement dans le
+worktree local `mcp-python-instance-configuration` ; l'installation canonique
+du MCP n'a pas été changée. Pour valider le parcours complet avant intégration,
+le child Python doit charger ce candidat via `PYTHONPATH` propre au processus.
 
 ## Architecture
 

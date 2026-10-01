@@ -53,6 +53,7 @@ export interface CorpusView {
 
 export interface CalibrationApplicationOptions {
   repositories: LocalStore;
+  configurationIdentity?: string;
   bridge: CalibrationBridge;
   canonical: CanonicalProfilePort;
   credentials?: CredentialProvider;
@@ -262,6 +263,7 @@ function projectCoreRun(core: CoreRunRecord, previous?: CalibrationRun): Calibra
   return {
     id: core.runId,
     workspaceId: core.workspaceId,
+    configurationIdentity: previous?.configurationIdentity,
     status: core.status as CalibrationRun["status"],
     idempotencyKey: core.runId,
     request: coreRequestToResolved(core, previous?.request),
@@ -284,6 +286,7 @@ function normalizeCoreWorkflowError(error: unknown): Error {
 
 export class CalibrationApplication {
   private readonly repositories: LocalStore;
+  private readonly configurationIdentity?: string;
   private readonly bridge: CalibrationBridge;
   private readonly canonical: CanonicalProfilePort;
   private readonly credentials?: CredentialProvider;
@@ -295,6 +298,13 @@ export class CalibrationApplication {
   private readonly sessionNonce: string;
 
   constructor(options: CalibrationApplicationOptions) {
+    if (
+      options.configurationIdentity !== undefined &&
+      !/^v1:hmac-sha256:[a-f0-9]{64}$/u.test(options.configurationIdentity)
+    ) {
+      throw new TypeError("invalid configurationIdentity");
+    }
+    this.configurationIdentity = options.configurationIdentity;
     this.repositories = options.repositories;
     this.bridge = options.bridge;
     this.canonical = options.canonical;
@@ -333,6 +343,16 @@ export class CalibrationApplication {
     }
   }
 
+  private hasCompatibleConfiguration(run: CalibrationRun): boolean {
+    return run.configurationIdentity !== undefined && run.configurationIdentity === this.configurationIdentity;
+  }
+
+  private assertRunConfiguration(run: CalibrationRun): void {
+    if (this.hasCompatibleConfiguration(run)) return;
+    const code = run.configurationIdentity === undefined ? "configuration_identity_missing" : "configuration_mismatch";
+    throw new ConflictError(code, code);
+  }
+
   private async assertConfigured(): Promise<void> {
     if (!this.credentials) return;
     const status = await this.credentials.status();
@@ -352,7 +372,7 @@ export class CalibrationApplication {
     const recoveredAt = nowIso(this.clock);
     await Promise.all(
       runs
-        .filter((run) => run.status === "running")
+        .filter((run) => run.status === "running" && this.hasCompatibleConfiguration(run))
         .map((run) => this.repositories.runs.recoverRunning(workspaceId, run.id, recoveredAt)),
     );
   }
@@ -418,8 +438,11 @@ export class CalibrationApplication {
   }
 
   private async getRunOrThrow(workspaceId: string, runId: string): Promise<CalibrationRun> {
+    const local = await this.repositories.runs.get(workspaceId, runId);
+    if (local && local.workspaceId === workspaceId) this.assertRunConfiguration(local);
     const run = await this.getRun(workspaceId, runId);
     if (!run) throw new NotFoundError(`calibration run not found: ${runId}`);
+    this.assertRunConfiguration(run);
     return run;
   }
 
@@ -516,6 +539,7 @@ export class CalibrationApplication {
 
   async prepareDryRun(input: CalibrationInput): Promise<CalibrationRun> {
     assertWorkspaceId(input.workspaceId);
+    if (!this.configurationIdentity) throw new UnavailableError("configuration identity is unavailable");
     await this.ensureRecovered(input.workspaceId);
     await this.assertConfigured();
     const activeCorpus = await this.repositories.corpus.getActiveVersion(input.workspaceId);
@@ -559,10 +583,16 @@ export class CalibrationApplication {
       if (isUnavailableMessage(message)) throw new UnavailableError(message);
       throw new ContractValidationError(message);
     }
+    const existing = await this.repositories.runs.get(input.workspaceId, id);
+    if (existing) {
+      this.assertRunConfiguration(existing);
+      throw new ConflictError("calibration run ID already exists");
+    }
     const timestamp = nowIso(this.clock);
     const run: CalibrationRun = {
       id,
       workspaceId: input.workspaceId,
+      configurationIdentity: this.configurationIdentity,
       status: "draft",
       idempotencyKey: id,
       request,
@@ -761,9 +791,11 @@ export class CalibrationApplication {
     assertWorkspaceId(workspaceId);
     const initial = await this.repositories.runs.get(workspaceId, runId);
     if (!initial || initial.workspaceId !== workspaceId) return null;
+    if (!this.hasCompatibleConfiguration(initial)) return initial;
     await this.ensureRecovered(workspaceId);
     const local = await this.repositories.runs.get(workspaceId, runId);
     if (!local || local.workspaceId !== workspaceId) return null;
+    if (!this.hasCompatibleConfiguration(local)) return local;
     if (!isCoreBackedRun(local) || !this.bridge.getRun) return local;
     let core: CoreRunRecord;
     try {
@@ -787,54 +819,56 @@ export class CalibrationApplication {
 
   async publishProfile(workspaceId: string, runId: string): Promise<VoiceProfile> {
     assertWorkspaceId(workspaceId);
-    const run = await this.getRunOrThrow(workspaceId, runId);
-    if (run.status !== "succeeded") throw new ConflictError("profile publication requires a successful run");
-    if (run.request.postproc !== "cut")
-      throw new ContractValidationError('profile publication requires postproc="cut" for the canonical WPM source');
-    const report = await this.loadReport(run);
-    const wpm = wpmFromReport(report);
-    if (wpm === null) throw new ContractValidationError("successful calibration result has no WPM");
-    let publishedWpm = wpm;
-    let canonical: { canonicalRef: string };
-    try {
-      if (this.bridge.publish) {
-        const publication = await this.bridge.publish({ workspaceId: run.workspaceId, runId: run.id });
-        publishedWpm = publication.wpm;
-        canonical = await this.canonical.ensurePublished({
-          voiceRef: run.request.voiceRef,
-          wpm: publishedWpm,
-          runId: run.id,
-          corpusVersionId: run.request.corpusVersionId,
-          language: run.request.params.language === "en" ? "en" : "fr",
-        });
-      } else {
-        canonical = await this.canonical.ensurePublished({
-          voiceRef: run.request.voiceRef,
-          wpm,
-          runId: run.id,
-          corpusVersionId: run.request.corpusVersionId,
-          language: run.request.params.language === "en" ? "en" : "fr",
-        });
+    return this.withRunLock(workspaceId, runId, async () => {
+      const run = await this.getRunOrThrow(workspaceId, runId);
+      if (run.status !== "succeeded") throw new ConflictError("profile publication requires a successful run");
+      if (run.request.postproc !== "cut")
+        throw new ContractValidationError('profile publication requires postproc="cut" for the canonical WPM source');
+      const report = await this.loadReport(run);
+      const wpm = wpmFromReport(report);
+      if (wpm === null) throw new ContractValidationError("successful calibration result has no WPM");
+      let publishedWpm = wpm;
+      let canonical: { canonicalRef: string };
+      try {
+        if (this.bridge.publish) {
+          const publication = await this.bridge.publish({ workspaceId: run.workspaceId, runId: run.id });
+          publishedWpm = publication.wpm;
+          canonical = await this.canonical.ensurePublished({
+            voiceRef: run.request.voiceRef,
+            wpm: publishedWpm,
+            runId: run.id,
+            corpusVersionId: run.request.corpusVersionId,
+            language: run.request.params.language === "en" ? "en" : "fr",
+          });
+        } else {
+          canonical = await this.canonical.ensurePublished({
+            voiceRef: run.request.voiceRef,
+            wpm,
+            runId: run.id,
+            corpusVersionId: run.request.corpusVersionId,
+            language: run.request.params.language === "en" ? "en" : "fr",
+          });
+        }
+      } catch (error) {
+        const message = errorMessage(error);
+        if (isUnavailableMessage(message)) throw new UnavailableError(message);
+        throw new ContractValidationError(message);
       }
-    } catch (error) {
-      const message = errorMessage(error);
-      if (isUnavailableMessage(message)) throw new UnavailableError(message);
-      throw new ContractValidationError(message);
-    }
-    const profile: VoiceProfile = {
-      id: randomUUID(),
-      workspaceId: run.workspaceId,
-      voiceRef: run.request.voiceRef,
-      wpmSnapshot: publishedWpm,
-      wpmAuthority: "python-voice-wpm",
-      canonicalRef: canonical.canonicalRef,
-      sourceRunId: run.id,
-      corpusVersionId: run.request.corpusVersionId,
-      reportId: run.reportId as string,
-      publishedAt: nowIso(this.clock),
-    };
-    await this.repositories.profiles.publish(profile);
-    return profile;
+      const profile: VoiceProfile = {
+        id: randomUUID(),
+        workspaceId: run.workspaceId,
+        voiceRef: run.request.voiceRef,
+        wpmSnapshot: publishedWpm,
+        wpmAuthority: "python-voice-wpm",
+        canonicalRef: canonical.canonicalRef,
+        sourceRunId: run.id,
+        corpusVersionId: run.request.corpusVersionId,
+        reportId: run.reportId as string,
+        publishedAt: nowIso(this.clock),
+      };
+      await this.repositories.profiles.publish(profile);
+      return profile;
+    });
   }
 
   async listVoiceProfiles(workspaceId = DEFAULT_WORKSPACE): Promise<VoiceProfile[]> {

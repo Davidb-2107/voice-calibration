@@ -56,7 +56,7 @@ function errorPayload(error: unknown): { code: string; message: string } {
   if (error instanceof NotFoundError) return { code: "not_found", message: error.message };
   if (error instanceof ContractValidationError) return { code: error.code, message: error.message };
   if (error instanceof UnavailableError) return { code: error.code, message: error.message };
-  if (error instanceof ConflictError) return { code: "conflict", message: error.message };
+  if (error instanceof ConflictError) return { code: error.code, message: error.message };
   if (error instanceof Error && /revision conflict/i.test(error.message))
     return { code: "if_match_failed", message: error.message };
   return { code: "internal_error", message: "unexpected local failure" };

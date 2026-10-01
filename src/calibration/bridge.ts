@@ -1,5 +1,6 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 
 import { assertWorkspaceId, type ResolvedCalibrationRequest } from "./domain.js";
 
@@ -180,6 +181,7 @@ function makeGateRequest(snapshot: ResolvedCalibrationRequest): Record<string, u
 }
 
 class NodeMcpStdioTransport implements CalibrationTransport {
+  private readonly launchEnv: NodeJS.ProcessEnv;
   private child: ChildProcessWithoutNullStreams | null = null;
   private nextId = 1;
   private buffer = "";
@@ -195,7 +197,14 @@ class NodeMcpStdioTransport implements CalibrationTransport {
     private readonly command = "voice-calibration-mcp",
     private readonly args: string[] = [],
     private readonly cwd?: string,
-  ) {}
+    launch?: { wpmPath?: string },
+  ) {
+    this.launchEnv = { ...process.env };
+    if (launch !== undefined) {
+      delete this.launchEnv.VOICE_WPM_PATH;
+      if (launch.wpmPath !== undefined) this.launchEnv.VOICE_WPM_PATH = launch.wpmPath;
+    }
+  }
 
   private diagnostic(): string {
     return String(redact(this.stderrBuffer, this.secret));
@@ -213,7 +222,7 @@ class NodeMcpStdioTransport implements CalibrationTransport {
     this.stderrBuffer = "";
     const child = spawn(this.command, this.args, {
       cwd: this.cwd,
-      env: { ...process.env, ...(secret ? { ELEVENLABS_API_KEY: secret } : {}) },
+      env: { ...this.launchEnv, ...(secret ? { ELEVENLABS_API_KEY: secret } : {}) },
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
     });
@@ -489,8 +498,10 @@ export function createCalibrationBridge(options: {
   transport?: CalibrationTransport;
   credentials: CredentialProvider;
   timeoutMs?: number;
+  wpmPath?: string;
 }): CalibrationBridge {
-  const transport = options.transport ?? new NodeMcpStdioTransport();
+  const launch = Object.hasOwn(options, "wpmPath") ? { wpmPath: options.wpmPath } : undefined;
+  const transport = options.transport ?? new NodeMcpStdioTransport(undefined, undefined, undefined, launch);
   const timeoutMs = options.timeoutMs ?? 120_000;
   const invokeTool = async (
     name: string,
@@ -733,26 +744,29 @@ export function createCanonicalProfilePort(
     }) => Promise<{ canonicalRef: string; wpm: number }>;
     wpmPath?: string;
     language?: "fr" | "en";
+    referenceBase?: string;
   } = {},
 ): CanonicalProfilePort {
+  const wpmPath = Object.hasOwn(options, "wpmPath") ? options.wpmPath : process.env.VOICE_WPM_PATH;
+  const referenceBase = options.referenceBase ?? (wpmPath ? pathToFileURL(wpmPath).href : undefined);
   return {
     async getObservationSummary() {
-      return readObservationSummary(options.wpmPath);
+      return readObservationSummary(wpmPath);
     },
     async findPublished(input) {
-      return readPublishedWpm(input, options.wpmPath, options.language ?? "fr");
+      return readPublishedWpm(input, wpmPath, options.language ?? "fr", referenceBase);
     },
     async ensurePublished(input) {
       const result = options.verify
         ? await options.verify(input)
-        : await verifyWpmFile(input, options.wpmPath, options.language ?? "fr");
+        : await verifyWpmFile(input, wpmPath, options.language ?? "fr", referenceBase);
       if (Math.abs(result.wpm - input.wpm) > 0.001) throw new Error("canonical_wpm_mismatch");
       return { canonicalRef: result.canonicalRef };
     },
   };
 }
 
-async function readObservationSummary(wpmPath = process.env.VOICE_WPM_PATH): Promise<ObservationSummary> {
+async function readObservationSummary(wpmPath?: string): Promise<ObservationSummary> {
   if (!wpmPath) return { voices: [], sourceAvailable: false };
   try {
     const data = JSON.parse(await readFile(wpmPath, "utf8")) as Record<string, unknown>;
@@ -798,18 +812,20 @@ async function readObservationSummary(wpmPath = process.env.VOICE_WPM_PATH): Pro
 
 async function verifyWpmFile(
   input: { voiceRef: string; wpm: number; language?: "fr" | "en" },
-  wpmPath = process.env.VOICE_WPM_PATH,
+  wpmPath: string | undefined,
   language: "fr" | "en",
+  referenceBase?: string,
 ): Promise<{ canonicalRef: string; wpm: number }> {
-  const published = await readPublishedWpm(input, wpmPath, language);
+  const published = await readPublishedWpm(input, wpmPath, language, referenceBase);
   if (!published) throw new Error("canonical_wpm_unavailable");
   return published;
 }
 
 async function readPublishedWpm(
   input: { voiceRef: string; language?: "fr" | "en" },
-  wpmPath = process.env.VOICE_WPM_PATH,
+  wpmPath: string | undefined,
   language: "fr" | "en",
+  referenceBase?: string,
 ): Promise<{ canonicalRef: string; wpm: number } | null> {
   if (!wpmPath) throw new Error("canonical_wpm_unavailable");
   language = input.language ?? language;
@@ -823,7 +839,7 @@ async function readPublishedWpm(
   const wpm = language === "en" ? resultObject(record?.[key]).en : record?.[key];
   if (typeof wpm !== "number") return null;
   const suffix = language === "en" ? "wpm_calibrated_by_lang.en" : "wpm_calibrated";
-  return { canonicalRef: `Shared/voice-calibration/voice_wpm.json#${input.voiceRef}.${suffix}`, wpm };
+  return { canonicalRef: `${referenceBase}#${encodeURIComponent(`${input.voiceRef}.${suffix}`)}`, wpm };
 }
 
 export { BridgeTransportError, NodeMcpStdioTransport };

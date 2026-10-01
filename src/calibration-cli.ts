@@ -14,6 +14,9 @@ const HELP = `voice-calibration — interface locale de calibration ElevenLabs
 Usage: voice-calibration [options]
 
 Options:
+  --workspace-id <id>    Workspace fixe de l'instance
+  --env-file <file>      Fichier credentials ElevenLabs de l'instance
+  --wpm-path <file>      Source WPM canonique de l'instance
   --data-dir <dir>       Répertoire local des runs et profils
   --host <host>          Adresse d'écoute (défaut : 127.0.0.1)
   --port <port>          Port d'écoute (défaut : port libre)
@@ -26,6 +29,9 @@ La calibration utilise le corpus publié et conserve ses garanties de dry-run,
 d'approbation, d'immutabilité, d'idempotence et de protection des secrets.`;
 
 interface Options {
+  workspaceId?: string;
+  credentials?: { envFile: string };
+  wpmPath?: string;
   dataDir?: string;
   host?: string;
   port?: number;
@@ -54,6 +60,9 @@ function parseArgs(args: string[]): Options | null {
     if (arg === "--open") options.open = true;
     else if (arg === "--allow-network") options.allowNetwork = true;
     else if (arg === "--data-dir") options.dataDir = valueFor(args, index++, arg);
+    else if (arg === "--workspace-id") options.workspaceId = valueFor(args, index++, arg);
+    else if (arg === "--env-file") options.credentials = { envFile: valueFor(args, index++, arg) };
+    else if (arg === "--wpm-path") options.wpmPath = valueFor(args, index++, arg);
     else if (arg === "--host") options.host = valueFor(args, index++, arg);
     else if (arg === "--port") {
       const raw = valueFor(args, index++, arg);
