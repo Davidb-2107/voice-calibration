@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import { deepStrictEqual, rejects, strictEqual } from "node:assert";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -80,6 +80,23 @@ test("canonical corpus uses the same vault discovery as credentials outside the 
   }] });
 });
 
+test("explicit WPM sources accept reserved metadata while preserving the corpus", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "calibration-metadata-"));
+  const stateDir = join(root, "state");
+  const wpmPath = join(root, "wpm.json");
+  const source = JSON.stringify({ _default: 145, _audit_2026: "historical audit", "voice-test": {} });
+  writeFileSync(wpmPath, source);
+  let ui;
+  t.after(async () => { await ui?.close(); rmSync(root, { recursive: true, force: true }); });
+  ui = await startVoiceCalibrationUi({
+    workspaceId: "local-default", stateDir, wpmPath, dataDir: join(root, "ui"),
+    credentials: { env: { ELEVENLABS_API_KEY: "test-key" } },
+    mcpTransport: instanceTransport("local-default", stateDir),
+  });
+  strictEqual((await fetch(`${ui.url}/api/v1/bootstrap`)).status, 200);
+  strictEqual(readFileSync(wpmPath, "utf8"), source);
+});
+
 test("explicit sources fail closed before storage is created", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "calibration-config-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -108,7 +125,7 @@ test("explicit sources fail closed before storage is created", async (t) => {
     { ...valid, stateDir: " " },
     { ...valid, stateDir: null },
   ];
-  for (const value of ["not json", "[]", "null", '{"voice":null}']) {
+  for (const value of ["not json", "[]", "null", '{"voice":null}', '{"_audit":"valid metadata","voice":42}']) {
     const path = join(root, `bad-${invalid.length}.json`);
     writeFileSync(path, value);
     invalid.push({ ...valid, wpmPath: path });

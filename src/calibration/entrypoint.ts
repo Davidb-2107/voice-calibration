@@ -102,7 +102,7 @@ export async function startVoiceCalibrationUi(options: CalibrationUiOptions = {}
       typeof corpus !== "object" ||
       Array.isArray(corpus) ||
       Object.entries(corpus).some(
-        ([key, value]) => key !== "_default" && (!value || typeof value !== "object" || Array.isArray(value)),
+        ([key, value]) => !key.startsWith("_") && (!value || typeof value !== "object" || Array.isArray(value)),
       )
     ) {
       throw new Error("Invalid WPM corpus");
