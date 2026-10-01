@@ -3,9 +3,11 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
+import { pathToFileURL } from "node:url";
 
 import {
   BridgeTransportError,
+  NodeMcpStdioTransport,
   createCalibrationBridge,
   createCanonicalProfilePort,
 } from "../dist/calibration/bridge.js";
@@ -28,6 +30,67 @@ const resolvedRequest = {
   },
   postproc: "cut",
 };
+
+test("stdio child uses the construction environment and selected WPM source", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "calibration-child-"));
+  const childPath = join(root, "child.mjs");
+  writeFileSync(childPath, `
+import { createInterface } from "node:readline";
+import { writeFileSync } from "node:fs";
+writeFileSync(process.argv[2], JSON.stringify({
+  key: process.env.ELEVENLABS_API_KEY ?? null,
+  wpmPath: process.env.VOICE_WPM_PATH ?? null,
+  marker: process.env.CALIBRATION_TEST_MARKER ?? null,
+}));
+for await (const line of createInterface({ input: process.stdin })) {
+  const message = JSON.parse(line);
+  if (message.id === undefined) continue;
+  const result = message.method === "initialize"
+    ? { protocolVersion: "2025-11-25", capabilities: {} }
+    : { tools: [{ name: "calibrate_voice", inputSchema: { type: "object" } }] };
+  process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }) + "\\n");
+}
+`);
+  const saved = {
+    key: process.env.ELEVENLABS_API_KEY,
+    wpm: process.env.VOICE_WPM_PATH,
+    marker: process.env.CALIBRATION_TEST_MARKER,
+  };
+  t.after(() => {
+    for (const [name, value] of Object.entries({
+      ELEVENLABS_API_KEY: saved.key,
+      VOICE_WPM_PATH: saved.wpm,
+      CALIBRATION_TEST_MARKER: saved.marker,
+    })) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  });
+  process.env.ELEVENLABS_API_KEY = "old-key";
+  process.env.VOICE_WPM_PATH = join(root, "inherited.json");
+  process.env.CALIBRATION_TEST_MARKER = "before";
+  const variants = [
+    { launch: { wpmPath: join(root, "source a.json") }, expected: join(root, "source a.json") },
+    { launch: { wpmPath: undefined }, expected: null },
+    { launch: undefined, expected: join(root, "inherited.json") },
+  ];
+  const transports = variants.map(({ launch }, index) => new NodeMcpStdioTransport(
+    process.execPath, [childPath, join(root, `child-${index}.json`)], root, launch,
+  ));
+  t.after(async () => {
+    for (const transport of transports) await transport.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+  process.env.ELEVENLABS_API_KEY = "changed-key";
+  process.env.VOICE_WPM_PATH = join(root, "changed.json");
+  process.env.CALIBRATION_TEST_MARKER = "after";
+  for (const [index, { expected }] of variants.entries()) {
+    deepStrictEqual(await transports[index].schema("selected-key", 5000), { type: "object" });
+    deepStrictEqual(JSON.parse(readFileSync(join(root, `child-${index}.json`), "utf8")), {
+      key: "selected-key", wpmPath: expected, marker: "before",
+    });
+  }
+});
 
 test("bridge rejects foreign workspace records in every core operation", async () => {
   const record = {
@@ -448,14 +511,56 @@ test("canonical profile port detects an existing published voice before calibrat
     deepStrictEqual(
       await canonical.findPublished?.({ voiceRef: "voice-1", language: "fr" }),
       {
-        canonicalRef: "Shared/voice-calibration/voice_wpm.json#voice-1.wpm_calibrated",
+        canonicalRef: `${pathToFileURL(wpmPath).href}#voice-1.wpm_calibrated`,
         wpm: 172.5,
       },
     );
+    const historical = createCanonicalProfilePort({
+      wpmPath, referenceBase: "Shared/voice-calibration/voice_wpm.json",
+    });
+    deepStrictEqual(await historical.findPublished({ voiceRef: "voice-1" }), {
+      canonicalRef: "Shared/voice-calibration/voice_wpm.json#voice-1.wpm_calibrated", wpm: 172.5,
+    });
     strictEqual(await canonical.findPublished?.({ voiceRef: "voice-2", language: "fr" }), null);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("canonical ports keep separate sources, reread content, and encode FR/EN references", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "canonical-sources-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const pathA = join(root, "source a.json");
+  const pathB = join(root, "source b.json");
+  writeFileSync(pathA, "{}");
+  writeFileSync(pathB, JSON.stringify({
+    "voix été": {
+      profile: { voice_id: "fr" }, wpm_calibrated: 148,
+      profiles_by_lang: { en: { voice_id: "en" } }, wpm_calibrated_by_lang: { en: 154 },
+    },
+  }));
+  const a = createCanonicalProfilePort({ wpmPath: pathA });
+  const b = createCanonicalProfilePort({ wpmPath: pathB });
+  const input = { voiceRef: "voix été", wpm: 148, runId: "r", corpusVersionId: "v" };
+  strictEqual(await a.findPublished({ voiceRef: input.voiceRef }), null);
+  await rejects(a.ensurePublished(input), /canonical_wpm_unavailable/);
+  const fragment = encodeURIComponent("voix été.wpm_calibrated");
+  deepStrictEqual(await b.findPublished({ voiceRef: input.voiceRef }), {
+    canonicalRef: `${pathToFileURL(pathB).href}#${fragment}`, wpm: 148,
+  });
+  deepStrictEqual(await b.findPublished({ voiceRef: input.voiceRef, language: "en" }), {
+    canonicalRef: `${pathToFileURL(pathB).href}#${encodeURIComponent("voix été.wpm_calibrated_by_lang.en")}`, wpm: 154,
+  });
+  writeFileSync(pathA, JSON.stringify({ "fresh voice": { observed_runs: [] } }));
+  deepStrictEqual((await a.getObservationSummary()).voices.map((voice) => voice.voiceRef), ["fresh voice"]);
+  strictEqual(await a.findPublished({ voiceRef: input.voiceRef }), null);
+  const savedPath = process.env.VOICE_WPM_PATH;
+  process.env.VOICE_WPM_PATH = pathB;
+  t.after(() => savedPath === undefined ? delete process.env.VOICE_WPM_PATH : process.env.VOICE_WPM_PATH = savedPath);
+  strictEqual(await a.findPublished({ voiceRef: input.voiceRef }), null);
+  const noSource = createCanonicalProfilePort({ wpmPath: undefined });
+  deepStrictEqual(await noSource.getObservationSummary(), { sourceAvailable: false, voices: [] });
+  await rejects(noSource.ensurePublished(input), /canonical_wpm_unavailable/);
 });
 
 test("canonical observation summary follows raw-clean and post-processing protocol without editing history", async () => {

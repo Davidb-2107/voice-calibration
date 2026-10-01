@@ -327,8 +327,14 @@ export function fakeCanonicalProfilePort(options = {}) {
   };
 }
 
-export function makeApplication({ repositories, bridge, canonical, clock, credentials, voiceDirectory } = {}) {
-  return createCalibrationApplication({ repositories, bridge, canonical, clock, credentials, voiceDirectory });
+const TEST_IDENTITY = "v1:hmac-sha256:" + "a".repeat(64);
+
+export function makeApplication(options = {}) {
+  return createCalibrationApplication({
+    ...options,
+    configurationIdentity: Object.hasOwn(options, "configurationIdentity")
+      ? options.configurationIdentity : TEST_IDENTITY,
+  });
 }
 
 async function publishCorpus(repositories, workspaceId = "local-default") {
@@ -353,6 +359,100 @@ function snapshotFiles(root) {
   visit(root);
   return snapshot;
 }
+
+test("run configuration blocks every mutation before bridge, canonical access or recovery", async (t) => {
+  const forbidden = () => { throw new Error("unexpected bridge or canonical access"); };
+  const bridge = Object.fromEntries(["getSchema", "dryRun", "propose", "getRun", "approve", "execute", "reconcile", "publish"].map((name) => [name, forbidden]));
+  const canonical = { findPublished: forbidden, ensurePublished: forbidden, getObservationSummary: () => ({}) };
+  for (const [kind, status] of [
+    ["mismatch", "succeeded"], ["missing", "succeeded"],
+    ["mismatch", "running"], ["missing", "running"],
+    ["mismatch", "execution_unknown"], ["missing", "execution_unknown"],
+    ["mismatch", "core-backed"], ["missing", "core-backed"],
+  ]) {
+    await t.test(`${kind} ${status}`, async (part) => {
+      const root = mkdtempSync(join(tmpdir(), "configuration-guard-"));
+      part.after(() => rmSync(root, { recursive: true, force: true }));
+      const repositories = createLocalStore(root);
+      await publishCorpus(repositories);
+      const seed = makeApplication({ repositories, bridge: fakeBridge(), canonical: fakeCanonicalProfilePort() });
+      let run = await seed.prepareDryRun(input);
+      run = await seed.approve(run.workspaceId, run.id, { requestDigest: run.requestDigest });
+      run = await seed.execute(run.workspaceId, run.id);
+      run = {
+        ...run,
+        status: status === "core-backed" ? "succeeded" : status,
+        requestDigest: status === "core-backed" ? "v1:sha256:" + "c".repeat(64) : run.requestDigest,
+      };
+      if (kind === "missing") delete run.configurationIdentity;
+      await repositories.runs.save(run);
+      const before = snapshotFiles(root);
+      const denied = makeApplication({
+        repositories: createLocalStore(root), bridge, canonical,
+        configurationIdentity: "v1:hmac-sha256:" + "b".repeat(64),
+      });
+      const expected = kind === "missing" ? "configuration_identity_missing" : "configuration_mismatch";
+      const local = await denied.getRun(run.workspaceId, run.id);
+      strictEqual(local.status, run.status);
+      strictEqual((await denied.getReport(run.workspaceId, run.id)).runId, run.id);
+      strictEqual((await denied.getBootstrap(run.workspaceId)).recentRuns.find((item) => item.id === run.id).status, run.status);
+      for (const operation of [
+        () => denied.approve(run.workspaceId, run.id, { requestDigest: run.requestDigest }),
+        () => denied.execute(run.workspaceId, run.id),
+        () => denied.reconcile(run.workspaceId, run.id),
+        () => denied.publishProfile(run.workspaceId, run.id),
+      ]) await rejects(operation(), (error) => error.code === expected);
+      deepStrictEqual(snapshotFiles(root), before);
+    });
+  }
+});
+
+test("missing configuration cannot prepare and a forged HTTP identity cannot authorize a run", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "configuration-http-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const repositories = createLocalStore(root);
+  await publishCorpus(repositories);
+  const bridge = fakeBridge();
+  await rejects(makeApplication({ repositories, bridge, canonical: fakeCanonicalProfilePort(), configurationIdentity: undefined }).prepareDryRun(input), /configuration identity is unavailable/);
+  strictEqual(bridge.state.dryRuns.length, 0);
+  const app = makeApplication({ repositories, bridge, canonical: fakeCanonicalProfilePort() });
+  const ui = await startCalibrationUi({ application: app, host: "127.0.0.1", port: 0 });
+  t.after(() => ui.close());
+  const nonce = (await (await fetch(`${ui.url}/api/v1/bootstrap`)).json()).sessionNonce;
+  const headers = { "content-type": "application/json", "x-calibration-nonce": nonce };
+  const response = await fetch(`${ui.url}/api/v1/calibration-runs/dry-run`, {
+    method: "POST", headers,
+    body: JSON.stringify({ ...input, configurationIdentity: "v1:hmac-sha256:" + "b".repeat(64) }),
+  });
+  strictEqual(response.status, 201);
+  const run = await response.json();
+  strictEqual(run.configurationIdentity, TEST_IDENTITY);
+  const mismatched = makeApplication({ repositories, bridge: fakeBridge(), canonical: fakeCanonicalProfilePort(), configurationIdentity: "v1:hmac-sha256:" + "b".repeat(64) });
+  const deniedUi = await startCalibrationUi({ application: mismatched, host: "127.0.0.1", port: 0 });
+  t.after(() => deniedUi.close());
+  const deniedNonce = (await (await fetch(`${deniedUi.url}/api/v1/bootstrap`)).json()).sessionNonce;
+  const deniedHeaders = { "content-type": "application/json", "x-calibration-nonce": deniedNonce };
+  for (const [path, requestBody] of [
+    [`calibration-runs/${run.id}/approve`, { requestDigest: run.requestDigest, configurationIdentity: "v1:hmac-sha256:" + "b".repeat(64) }],
+    [`calibration-runs/${run.id}/execute`, {}],
+    [`calibration-runs/${run.id}/reconcile`, {}],
+    ["voice-profiles", { runId: run.id }],
+  ]) {
+    const result = await fetch(`${deniedUi.url}/api/v1/${path}`, { method: "POST", headers: deniedHeaders, body: JSON.stringify(requestBody) });
+    strictEqual(result.status, 409);
+    strictEqual((await result.json()).error.code, "configuration_mismatch");
+  }
+  strictEqual((await fetch(`${deniedUi.url}/api/v1/calibration-runs/${run.id}`)).status, 200);
+  const legacy = { ...run };
+  delete legacy.configurationIdentity;
+  await repositories.runs.save(legacy);
+  const missingResponse = await fetch(`${deniedUi.url}/api/v1/calibration-runs/${run.id}/approve`, {
+    method: "POST", headers: deniedHeaders, body: JSON.stringify({ requestDigest: run.requestDigest }),
+  });
+  strictEqual(missingResponse.status, 409);
+  strictEqual((await missingResponse.json()).error.code, "configuration_identity_missing");
+  throws(() => makeApplication({ repositories, bridge, canonical: fakeCanonicalProfilePort(), configurationIdentity: "bad" }), /invalid configurationIdentity/);
+});
 
 test("foreign first request does not recover local runs", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "workspace-restart-"));
@@ -678,14 +778,18 @@ test("the application projects the persistent core gate and never runs a second 
   strictEqual(run.id, "core-run-1");
   strictEqual(run.status, "dry_run_ready");
   strictEqual(run.requestDigest, "v1:sha256:core-request");
+  strictEqual(run.configurationIdentity, TEST_IDENTITY);
   strictEqual(bridge.state.calls[0].operation, "propose");
 
   const approved = await app.approve("local-default", run.id, { requestDigest: run.requestDigest });
   strictEqual(approved.status, "approved");
+  strictEqual(approved.configurationIdentity, TEST_IDENTITY);
   strictEqual(bridge.state.calls[1].operation, "approve");
 
   const executed = await app.execute("local-default", run.id);
   strictEqual(executed.status, "succeeded");
+  strictEqual(executed.configurationIdentity, TEST_IDENTITY);
+  strictEqual((await app.getRun("local-default", run.id)).configurationIdentity, TEST_IDENTITY);
   strictEqual(bridge.state.calls[2].operation, "execute");
   strictEqual(bridge.state.calls[2].input.coreRunId, "core-run-1");
   strictEqual(bridge.state.calls[2].input.workspaceId, "local-default");

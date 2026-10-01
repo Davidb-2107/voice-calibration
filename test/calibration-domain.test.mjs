@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import { doesNotThrow, match, strictEqual, throws } from "node:assert";
 
-import { fingerprintRequest, canonicalizeRequest } from "../dist/calibration/fingerprint.js";
+import { fingerprintRequest, canonicalizeRequest, fingerprintConfiguration } from "../dist/calibration/fingerprint.js";
 import { assertWorkspaceId, InvalidWorkspaceIdError, transitionRun } from "../dist/calibration/domain.js";
 
 test("workspace IDs have one canonical spelling", () => {
@@ -11,6 +11,18 @@ test("workspace IDs have one canonical spelling", () => {
   for (const id of ["", "WORKSPACE-A", "a/b", "a\\b", ".", "..", "a b", "é", null, 3]) {
     throws(() => assertWorkspaceId(id), InvalidWorkspaceIdError);
   }
+});
+
+test("configuration fingerprint changes with key, WPM source, provider and workspace", () => {
+  const config = { workspaceId: "workspace-a", provider: "elevenlabs", wpmPath: "C:/calibration/a.json" };
+  const first = fingerprintConfiguration(config, "key-a");
+  match(first, /^v1:hmac-sha256:[a-f0-9]{64}$/);
+  strictEqual(first, fingerprintConfiguration({ ...config }, "key-a"));
+  strictEqual(first === fingerprintConfiguration(config, "key-b"), false);
+  strictEqual(first === fingerprintConfiguration({ ...config, wpmPath: "C:/calibration/b.json" }, "key-a"), false);
+  strictEqual(first === fingerprintConfiguration({ ...config, workspaceId: "workspace-b" }, "key-a"), false);
+  strictEqual(first === fingerprintConfiguration({ ...config, provider: "other" }, "key-a"), false);
+  strictEqual(first.includes("key-a"), false);
 });
 
 const request = {

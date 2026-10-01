@@ -101,11 +101,22 @@ Une instance locale appartient au workspace fixé à son démarrage (`local-defa
 Les appels HTTP ne peuvent pas sélectionner un autre workspace. Les IDs utilisent uniquement
 les minuscules ASCII, chiffres, tirets et underscores. Les runs et artefacts sont vérifiés dans
 ce contexte avant toute reprise ou opération. Les credentials ElevenLabs et le WPM canonique
-restent globaux ; cette isolation locale ne suffit pas pour un SaaS multi-utilisateur.
+peuvent être fixés par instance avec `credentials` et `wpmPath`. Un workspace nommé
+exige ces deux sources explicites ; leur absence ou invalidité échoue avant écoute HTTP.
+`local-default` garde sa découverte historique.
 
 Toute identité fournie dans la query, le corps direct, `input` ou `draft` est contrôlée :
 une valeur invalide reçoit `400 invalid_workspace_id`, une valeur contradictoire
 `400 workspace_mismatch`. Un run absent ou étranger reçoit `404` avant reprise.
+
+La clé et le chemin WPM sont résolus une fois au démarrage. Une empreinte HMAC
+de la clé sélectionnée, du workspace, du fournisseur et du chemin WPM est
+persistée avec chaque nouveau run, distincte du `requestDigest` fournisseur.
+Le contenu WPM, le port et le chemin du `.env` n'entrent pas dans cette identité.
+Une identité différente interdit approbation, exécution, réconciliation et
+publication (`409 configuration_mismatch`) avant pont MCP ou écriture ; un run
+ancien sans identité renvoie `409 configuration_identity_missing`. Les GET de run,
+rapport et bootstrap restent possibles sans modifier les archives.
 
 ### Service applicatif
 
@@ -212,7 +223,9 @@ nouvel emplacement est créé explicitement, il devient prioritaire.
 Les écritures de corpus et de runs utilisent des fichiers temporaires,
 renommage atomique, verrous et contrôles de frontières/symlinks. Les
 références de profil local restent des projections : la valeur WPM autoritative
-est validée depuis `Shared/voice-calibration/voice_wpm.json`.
+est validée depuis le chemin canonique sélectionné pour l'instance. Le chemin
+historique conserve sa référence relative ; un autre chemin utilise une URI de
+fichier dans les nouvelles références.
 
 ## Pont vers le cœur de calibration
 
@@ -233,6 +246,9 @@ gère :
 
 Le bridge ne recalcule pas le WPM et ne crée pas un second fichier canonique.
 Il transporte les métriques et le résultat du cœur vers le service applicatif.
+Chaque processus MCP enfant reçoit la clé sélectionnée et `VOICE_WPM_PATH` dans
+son environnement, sans argument secret. Le port canonique Node lit le même
+chemin que le child. Le changement de source requiert un nouveau serveur.
 
 Le pont refuse tout record MCP dont le workspace ne correspond pas à l'appel, y compris
 avant extraction d'une publication confirmée. Ce contrôle empêche la projection locale,
@@ -244,8 +260,10 @@ il ne peut pas annuler une action déjà exécutée par le cœur MCP externe.
 Fichier : `src/calibration/credentials.ts`
 
 `createCredentialProvider()` cherche `ELEVENLABS_API_KEY` selon la convention
-du projet et expose seulement un statut public ou un secret au code serveur qui
-doit l’utiliser.
+historique pour `local-default`. Une source `credentials.envFile` ou
+`credentials.env` explicite est stricte et prime sur l'environnement global ;
+le secret sélectionné est figé pour le processus. Le provider expose seulement
+un statut public ou un secret au code serveur qui doit l’utiliser.
 
 `createVoiceDirectoryProvider()` utilise la clé dans l’en-tête
 `xi-api-key` pour appeler :

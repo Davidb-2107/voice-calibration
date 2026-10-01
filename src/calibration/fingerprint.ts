@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 
 import type { ResolvedCalibrationRequest } from "./domain.js";
 
@@ -78,4 +78,12 @@ export function canonicalizeRequest(request: ResolvedCalibrationRequest): string
 
 export function fingerprintRequest(request: ResolvedCalibrationRequest): string {
   return createHash("sha256").update(canonicalizeRequest(request), "utf8").digest("hex");
+}
+
+export function fingerprintConfiguration(
+  input: { workspaceId: string; provider: "elevenlabs"; wpmPath?: string },
+  secret: string,
+): string {
+  const descriptor = JSON.stringify([1, input.workspaceId, input.provider, input.wpmPath ?? null]);
+  return `v1:hmac-sha256:${createHmac("sha256", secret).update(descriptor, "utf8").digest("hex")}`;
 }

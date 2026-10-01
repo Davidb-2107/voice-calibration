@@ -39,7 +39,7 @@ export interface LocalStore {
 }
 
 export class ConflictError extends Error {
-  constructor(message = "revision conflict") {
+  constructor(message = "revision conflict", readonly code = "conflict") {
     super(message);
     this.name = "ConflictError";
   }

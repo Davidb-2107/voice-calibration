@@ -62,6 +62,7 @@ export interface CalibrationProposal {
 export interface CalibrationRun {
   id: string;
   workspaceId: string;
+  configurationIdentity?: string;
   status: RunStatus;
   idempotencyKey: string;
   request: ResolvedCalibrationRequest;

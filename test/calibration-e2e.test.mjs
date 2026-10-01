@@ -1,12 +1,15 @@
 import { test } from "node:test";
 import { deepStrictEqual, strictEqual, match } from "node:assert";
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createCalibrationApplication } from "../dist/calibration/application.js";
 import { startCalibrationUi } from "../dist/calibration/http-server.js";
 import { createLocalStore } from "../dist/calibration/ports.js";
+import { fingerprintConfiguration } from "../dist/calibration/fingerprint.js";
+
+const TEST_IDENTITY = "v1:hmac-sha256:" + "a".repeat(64);
 
 function fakeBridge() {
   const state = {
@@ -52,7 +55,7 @@ test(`local calibration MVP completes in ${workspaceId}`, async (t) => {
   const bridge = fakeBridge();
   const canonical = fakeCanonical();
   let now = new Date("2026-09-02T10:00:00.000Z");
-  const application = createCalibrationApplication({ repositories, bridge, canonical, clock: { now: () => now } });
+  const application = createCalibrationApplication({ repositories, bridge, canonical, clock: { now: () => now }, configurationIdentity: TEST_IDENTITY });
   const ui = await startCalibrationUi({ application, workspaceId, host: "127.0.0.1", port: 0 });
   t.after(async () => ui.close());
   const jsonHeaders = { "content-type": "application/json" };
@@ -144,7 +147,7 @@ test("profile publication fails closed when the canonical Python port fails", as
   const repositories = createLocalStore(mkdtempSync(join(tmpdir(), "calibration-e2e-fail-")));
   const bridge = fakeBridge();
   const canonical = fakeCanonical({ error: "canonical_wpm_unavailable" });
-  const application = createCalibrationApplication({ repositories, bridge, canonical });
+  const application = createCalibrationApplication({ repositories, bridge, canonical, configurationIdentity: TEST_IDENTITY });
   const ui = await startCalibrationUi({ application, host: "127.0.0.1", port: 0 });
   try {
     const nonce = (await (await fetch(`${ui.url}/api/v1/bootstrap`)).json()).sessionNonce;
@@ -164,4 +167,83 @@ test("profile publication fails closed when the canonical Python port fails", as
   } finally {
     await ui.close();
   }
+});
+
+test("restart preserves matching run identity and makes changed configuration archives read only", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "calibration-restart-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const wpmPath = join(root, "voice_wpm.json");
+  writeFileSync(wpmPath, "{}");
+  const workspaceId = "workspace-restart";
+  const identity = (secret) => fingerprintConfiguration({ workspaceId, provider: "elevenlabs", wpmPath }, secret);
+  const bridge = fakeBridge();
+  const canonical = fakeCanonical();
+  const start = async (configurationIdentity) => {
+    const application = createCalibrationApplication({ repositories: createLocalStore(root), bridge, canonical, configurationIdentity });
+    const ui = await startCalibrationUi({ application, workspaceId, host: "127.0.0.1", port: 0 });
+    const bootstrap = await body(await fetch(`${ui.url}/api/v1/bootstrap`));
+    return { ui, headers: { "content-type": "application/json", "x-calibration-nonce": bootstrap.sessionNonce } };
+  };
+  let instance = await start(identity("key-a"));
+  t.after(async () => instance.ui.close());
+  const draftResponse = await fetch(`${instance.ui.url}/api/v1/corpus/draft`);
+  const draft = await body(draftResponse);
+  const savedResponse = await fetch(`${instance.ui.url}/api/v1/corpus/draft`, {
+    method: "PUT", headers: { ...instance.headers, "if-match": draftResponse.headers.get("etag") },
+    body: JSON.stringify({ draft: { ...draft, items: [{ id: "one", order: 0, text: "Bonjour." }] } }),
+  });
+  strictEqual(savedResponse.status, 200);
+  const saved = await body(savedResponse);
+  strictEqual((await fetch(`${instance.ui.url}/api/v1/corpus/versions`, {
+    method: "POST", headers: instance.headers, body: JSON.stringify({ expectedRevision: saved.revision }),
+  })).status, 201);
+  const runResponse = await fetch(`${instance.ui.url}/api/v1/calibration-runs/dry-run`, {
+    method: "POST", headers: instance.headers,
+    body: JSON.stringify({ workspaceId, voiceRef: "voice-1", params: {
+      model_id: "eleven_v3", voice_settings: { stability: 0.5, similarity_boost: 0.85 },
+      mode: "precision", language: "fr", runs: 3,
+    }, postproc: "cut" }),
+  });
+  strictEqual(runResponse.status, 201);
+  const run = await body(runResponse);
+  strictEqual(run.configurationIdentity, identity("key-a"));
+  await instance.ui.close();
+
+  writeFileSync(wpmPath, JSON.stringify({ changed: {} }));
+  strictEqual(identity("key-a"), run.configurationIdentity);
+  instance = await start(identity("key-a"));
+  const runUrl = `${instance.ui.url}/api/v1/calibration-runs/${run.id}`;
+  const approved = await fetch(`${runUrl}/approve`, { method: "POST", headers: instance.headers, body: JSON.stringify({ requestDigest: run.requestDigest }) });
+  strictEqual(approved.status, 200);
+  strictEqual((await body(approved)).configurationIdentity, run.configurationIdentity);
+  const executed = await fetch(`${runUrl}/execute`, { method: "POST", headers: instance.headers, body: "{}" });
+  strictEqual(executed.status, 200);
+  strictEqual((await body(executed)).configurationIdentity, run.configurationIdentity);
+  strictEqual((await fetch(`${instance.ui.url}/api/v1/voice-profiles`, {
+    method: "POST", headers: instance.headers, body: JSON.stringify({ runId: run.id }),
+  })).status, 201);
+  const storedRun = join(root, "workspaces", workspaceId, "runs", `${run.id}.json`);
+  const before = readFileSync(storedRun);
+  const previousBridgeCalls = [bridge.state.dryRuns.length, bridge.state.executions.length, canonical.calls.length];
+  await instance.ui.close();
+
+  instance = await start(identity("key-b"));
+  const archiveUrl = `${instance.ui.url}/api/v1/calibration-runs/${run.id}`;
+  const archiveResponse = await fetch(archiveUrl);
+  strictEqual(archiveResponse.status, 200);
+  const archive = await body(archiveResponse);
+  strictEqual(archive.report.runId, run.id);
+  strictEqual(archive.configurationIdentity, run.configurationIdentity);
+  for (const [route, payload] of [
+    [`${archiveUrl}/approve`, { requestDigest: run.requestDigest }],
+    [`${archiveUrl}/execute`, {}],
+    [`${archiveUrl}/reconcile`, {}],
+    [`${instance.ui.url}/api/v1/voice-profiles`, { runId: run.id }],
+  ]) {
+    const denied = await fetch(route, { method: "POST", headers: instance.headers, body: JSON.stringify(payload) });
+    strictEqual(denied.status, 409);
+    strictEqual((await body(denied)).error.code, "configuration_mismatch");
+  }
+  deepStrictEqual(readFileSync(storedRun), before);
+  deepStrictEqual([bridge.state.dryRuns.length, bridge.state.executions.length, canonical.calls.length], previousBridgeCalls);
 });

@@ -214,6 +214,19 @@ test("writes survive reload and use the expected layout", async () => {
   await rejects(reloaded.artifacts.get("workspace-a", ref), /invalid artifact reference/);
 });
 
+test("configuration identity round-trips while historical runs stay identity-free", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "calibration-identity-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const identity = `v1:hmac-sha256:${"a".repeat(64)}`;
+  const store = createLocalStore(root);
+  await store.runs.create({ ...runFixture, configurationIdentity: identity });
+  await store.runs.create({ ...runFixture, id: "archive", idempotencyKey: "archive" });
+  const reopened = createLocalStore(root);
+  strictEqual((await reopened.runs.get("local-default", "run-1")).configurationIdentity, identity);
+  strictEqual((await reopened.runs.get("local-default", "archive")).configurationIdentity, undefined);
+  strictEqual((await reopened.runs.list("local-default")).find((run) => run.id === "archive").configurationIdentity, undefined);
+});
+
 test("artifacts round-trip and reject traversal", async () => {
   const store = makeStore();
   const ref = await store.artifacts.put("local-default", "run-1", "audio/sample.mp3", new Uint8Array([1, 2, 3]));
