@@ -118,6 +118,7 @@ interface TransportCall {
   remoteError?: { code?: number; message?: string; data?: unknown };
 }
 export interface CalibrationTransport {
+  readonly instanceStateDir?: string;
   onExit?(listener: () => void): void;
   schema(secret: string, timeoutMs: number): Promise<unknown>;
   call(args: Record<string, unknown>, secret: string, timeoutMs: number): Promise<TransportCall>;
@@ -186,6 +187,7 @@ function makeGateRequest(snapshot: ResolvedCalibrationRequest): Record<string, u
 }
 
 class NodeMcpStdioTransport implements CalibrationTransport {
+  readonly instanceStateDir?: string;
   private exitListener?: () => void;
   private terminalError?: BridgeTransportError;
   private readonly boundInstance: boolean;
@@ -199,19 +201,25 @@ class NodeMcpStdioTransport implements CalibrationTransport {
     { resolve: (response: TransportResponse) => void; reject: (error: Error) => void }
   >();
   private initialized: Promise<void> | null = null;
+  private closing?: Promise<void>;
   private secret = "";
 
   constructor(
     private readonly command = "voice-calibration-mcp",
     private readonly args: string[] = [],
     private readonly cwd?: string,
-    launch?: { wpmPath?: string; workspaceId?: string; stateDir?: string; uiWorkspaceDir?: string },
+    launch?: { tenantId?: string; wpmPath?: string; workspaceId?: string; stateDir?: string; uiWorkspaceDir?: string },
   ) {
     this.boundInstance = launch?.workspaceId !== undefined;
-    this.launchEnv = { ...process.env };
+    this.launchEnv = this.boundInstance
+      ? Object.fromEntries(Object.entries(process.env).filter(([name]) =>
+          ["PATH", "Path", "PATHEXT", "SystemRoot", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "HOME",
+            "USERPROFILE", "APPDATA", "LOCALAPPDATA", "LANG", "LC_ALL", "PYTHONPATH", "PYTHONNOUSERSITE"].includes(name)))
+      : { ...process.env };
     if (launch !== undefined) {
       delete this.launchEnv.VOICE_WPM_PATH;
       delete this.launchEnv.VOICE_CALIBRATION_WORKSPACE_ID;
+      delete this.launchEnv.VOICE_CALIBRATION_TENANT_ID;
       delete this.launchEnv.VOICE_CALIBRATION_UI_WORKSPACE_DIR;
       if (launch.wpmPath !== undefined) this.launchEnv.VOICE_WPM_PATH = launch.wpmPath;
       if (launch.workspaceId !== undefined) {
@@ -219,6 +227,7 @@ class NodeMcpStdioTransport implements CalibrationTransport {
         delete this.launchEnv.VOICE_CALIBRATION_GATE_DIR;
         delete this.launchEnv.VOICE_CALIBRATION_STATE_DIR;
         this.launchEnv.VOICE_CALIBRATION_WORKSPACE_ID = launch.workspaceId;
+        if (launch.tenantId !== undefined) this.launchEnv.VOICE_CALIBRATION_TENANT_ID = launch.tenantId;
         if (launch.stateDir !== undefined) this.launchEnv.VOICE_CALIBRATION_STATE_DIR = launch.stateDir;
         if (launch.uiWorkspaceDir !== undefined)
           this.launchEnv.VOICE_CALIBRATION_UI_WORKSPACE_DIR = launch.uiWorkspaceDir;
@@ -231,6 +240,7 @@ class NodeMcpStdioTransport implements CalibrationTransport {
   }
 
   private ensureChild(secret = ""): ChildProcessWithoutNullStreams {
+    if (this.closing) throw new BridgeTransportError("MCP process closing; restart calibration bridge", false);
     if (this.terminalError) throw this.terminalError;
     if (this.child) {
       if (secret && secret !== this.secret)
@@ -422,21 +432,26 @@ class NodeMcpStdioTransport implements CalibrationTransport {
   }
 
   async close(): Promise<void> {
+    if (this.closing) return this.closing;
     const child = this.child;
     if (!child) return;
     this.child = null;
     this.initialized = null;
-    child.stdin.end();
-    await new Promise<void>((resolve) => {
+    this.closing = new Promise<void>((resolve, reject) => {
+      let killTimer: ReturnType<typeof setTimeout> | undefined;
       const timer = setTimeout(() => {
         child.kill();
-        resolve();
+        // A kill request is not proof of exit; replacement must wait for the exit event.
+        killTimer = setTimeout(() => reject(new BridgeTransportError("MCP process did not exit", false)), 2_000);
       }, 2_000);
       child.once("exit", () => {
         clearTimeout(timer);
+        clearTimeout(killTimer);
         resolve();
       });
+      child.stdin.end();
     });
+    return this.closing;
   }
 }
 
@@ -532,6 +547,7 @@ export function createCalibrationBridge(options: {
   timeoutMs?: number;
   wpmPath?: string;
   workspaceId?: string;
+  tenantId?: string;
   stateDir?: string;
   uiWorkspaceDir?: string;
 }): CalibrationBridge {
@@ -540,6 +556,7 @@ export function createCalibrationBridge(options: {
       ? {
           wpmPath: options.wpmPath,
           workspaceId: options.workspaceId,
+          tenantId: options.tenantId,
           stateDir: options.stateDir,
           uiWorkspaceDir: options.uiWorkspaceDir,
         }
@@ -608,7 +625,8 @@ export function createCalibrationBridge(options: {
           if (
             info.remoteError ||
             identity.workspace_id !== options.workspaceId ||
-            identity.state_dir !== options.stateDir
+            identity.state_dir !== (transport.instanceStateDir ?? options.stateDir) ||
+            (options.tenantId !== undefined && identity.tenant_id !== options.tenantId)
           ) {
             throw new Error("MCP instance configuration mismatch; use a workspace-aware Python adapter");
           }

@@ -1,0 +1,10 @@
+**/.git
+**/node_modules
+**/dist
+**/__pycache__
+**/.pytest_cache
+**/*.egg-info
+**/.scratch
+**/.env*
+**/outputs
+**/temp

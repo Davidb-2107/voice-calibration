@@ -9,3 +9,7 @@ export {
   startVoiceCalibrationUi,
 } from "./calibration/entrypoint.js";
 export type { CalibrationUiHandle } from "./calibration/http-server.js";
+export { startSupabaseCalibrationApi, type SupabaseAuthOptions, type TenantWorkspaceOptions } from "./calibration/supabase-auth.js";
+export { EngineManager, type CalibrationEngine, type EngineRegistration, type EngineManagerOptions } from "./calibration/engine-manager.js";
+export { CalibrationJobQueue, type CalibrationJob, type JobIdentity } from "./calibration/job-queue.js";
+export { DockerMcpStdioTransport, type DockerEngineOptions } from "./calibration/docker-transport.js";

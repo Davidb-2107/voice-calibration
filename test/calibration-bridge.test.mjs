@@ -31,6 +31,30 @@ const resolvedRequest = {
   postproc: "cut",
 };
 
+test("stdio shutdown waits for actual exit even when a child ignores stdin closure", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "calibration-close-"));
+  const childPath = join(root, "child.mjs");
+  writeFileSync(childPath, `
+import { createInterface } from "node:readline";
+setInterval(() => {}, 1000);
+for await (const line of createInterface({ input: process.stdin })) {
+  const message = JSON.parse(line);
+  if (message.id === undefined) continue;
+  const result = message.method === "initialize"
+    ? { protocolVersion: "2025-11-25", capabilities: {} }
+    : { tools: [{ name: "calibrate_voice", inputSchema: { type: "object" } }] };
+  process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }) + "\\n");
+}
+`);
+  const transport = new NodeMcpStdioTransport(process.execPath, [childPath]);
+  t.after(async () => { await transport.close(); rmSync(root, { recursive: true, force: true }); });
+  await transport.schema("fake-key", 5000);
+  const child = transport.child;
+  await Promise.all([transport.close(), transport.close()]);
+  strictEqual(child.exitCode !== null || child.signalCode !== null, true);
+  await rejects(transport.schema("fake-key", 5000), /closing/);
+});
+
 test("stdio child uses the construction environment and selected WPM source", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "calibration-child-"));
   const childPath = join(root, "child.mjs");
@@ -41,6 +65,7 @@ writeFileSync(process.argv[2], JSON.stringify({
   key: process.env.ELEVENLABS_API_KEY ?? null,
   wpmPath: process.env.VOICE_WPM_PATH ?? null,
   marker: process.env.CALIBRATION_TEST_MARKER ?? null,
+  parentSecret: process.env.SUPABASE_SERVICE_ROLE_KEY ?? null,
   workspace: process.env.VOICE_CALIBRATION_WORKSPACE_ID ?? null,
   state: process.env.VOICE_CALIBRATION_STATE_DIR ?? null,
   gate: process.env.VOICE_CALIBRATION_GATE_DIR ?? null,
@@ -58,6 +83,7 @@ for await (const line of createInterface({ input: process.stdin })) {
     key: process.env.ELEVENLABS_API_KEY,
     wpm: process.env.VOICE_WPM_PATH,
     marker: process.env.CALIBRATION_TEST_MARKER,
+    parentSecret: process.env.SUPABASE_SERVICE_ROLE_KEY,
     workspace: process.env.VOICE_CALIBRATION_WORKSPACE_ID,
     state: process.env.VOICE_CALIBRATION_STATE_DIR,
     gate: process.env.VOICE_CALIBRATION_GATE_DIR,
@@ -67,6 +93,7 @@ for await (const line of createInterface({ input: process.stdin })) {
       ELEVENLABS_API_KEY: saved.key,
       VOICE_WPM_PATH: saved.wpm,
       CALIBRATION_TEST_MARKER: saved.marker,
+      SUPABASE_SERVICE_ROLE_KEY: saved.parentSecret,
       VOICE_CALIBRATION_WORKSPACE_ID: saved.workspace,
       VOICE_CALIBRATION_STATE_DIR: saved.state,
       VOICE_CALIBRATION_GATE_DIR: saved.gate,
@@ -78,6 +105,7 @@ for await (const line of createInterface({ input: process.stdin })) {
   process.env.ELEVENLABS_API_KEY = "old-key";
   process.env.VOICE_WPM_PATH = join(root, "inherited.json");
   process.env.CALIBRATION_TEST_MARKER = "before";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "parent-only-sentinel";
   process.env.VOICE_CALIBRATION_WORKSPACE_ID = "inherited";
   process.env.VOICE_CALIBRATION_STATE_DIR = join(root, "inherited-state");
   process.env.VOICE_CALIBRATION_GATE_DIR = join(root, "inherited-gate");
@@ -99,7 +127,8 @@ for await (const line of createInterface({ input: process.stdin })) {
   for (const [index, { expected }] of variants.entries()) {
     deepStrictEqual(await transports[index].schema("selected-key", 5000), { type: "object" });
     deepStrictEqual(JSON.parse(readFileSync(join(root, `child-${index}.json`), "utf8")), {
-      key: "selected-key", wpmPath: expected, marker: "before",
+      key: "selected-key", wpmPath: expected, marker: index === 0 ? null : "before",
+      parentSecret: index === 0 ? null : "parent-only-sentinel",
       workspace: index === 0 ? "staging" : index === 1 ? null : "inherited",
       state: join(root, index === 0 ? "selected-state" : "inherited-state"),
       gate: index === 0 ? null : join(root, "inherited-gate"),

@@ -81,13 +81,14 @@ export function fingerprintRequest(request: ResolvedCalibrationRequest): string 
 }
 
 export function fingerprintConfiguration(
-  input: { workspaceId: string; provider: "elevenlabs"; wpmPath?: string; stateDir?: string },
+  input: { tenantId?: string; workspaceId: string; provider: "elevenlabs"; wpmPath?: string; stateDir?: string },
   secret: string,
 ): string {
   const descriptor = JSON.stringify([1, input.workspaceId, input.provider, input.wpmPath ?? null]);
-  const boundDescriptor =
-    input.stateDir === undefined
+  const boundDescriptor = input.tenantId !== undefined
+    ? JSON.stringify([3, input.tenantId, input.workspaceId, input.provider, input.wpmPath ?? null, input.stateDir ?? null])
+    : input.stateDir === undefined
       ? descriptor
       : JSON.stringify([2, input.workspaceId, input.provider, input.wpmPath ?? null, input.stateDir]);
-  return `${input.stateDir === undefined ? "v1" : "v2"}:hmac-sha256:${createHmac("sha256", secret).update(boundDescriptor, "utf8").digest("hex")}`;
+  return `${input.tenantId !== undefined ? "v3" : input.stateDir === undefined ? "v1" : "v2"}:hmac-sha256:${createHmac("sha256", secret).update(boundDescriptor, "utf8").digest("hex")}`;
 }

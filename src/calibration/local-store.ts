@@ -49,7 +49,7 @@ function safeArtifactPath(root: string, runId: string, name?: string): string {
   return target;
 }
 
-async function assertNoSymlinkWithin(root: string, target: string): Promise<void> {
+export async function assertNoSymlinkWithin(root: string, target: string): Promise<void> {
   const resolvedRoot = resolve(root);
   const resolvedTarget = resolve(target);
   const relativeTarget = relative(resolvedRoot, resolvedTarget);
@@ -100,7 +100,7 @@ async function writeAtomic(path: string, bytes: Uint8Array): Promise<void> {
   await rename(tempPath, path);
 }
 
-async function writeJson(path: string, value: unknown): Promise<void> {
+export async function writeJson(path: string, value: unknown): Promise<void> {
   await writeAtomic(path, Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8"));
 }
 
@@ -110,7 +110,7 @@ async function readJson<T>(path: string): Promise<T> {
 
 const LOCK_WAIT_MS = 10;
 const LOCK_TIMEOUT_MS = 30_000;
-async function withFileLock<T>(lockPath: string, work: () => Promise<T>, timeoutMs: number): Promise<T> {
+export async function withFileLock<T>(lockPath: string, work: () => Promise<T>, timeoutMs: number): Promise<T> {
   const lockFile = `${lockPath}.lock`;
   await mkdir(dirname(lockPath), { recursive: true });
   const deadline = Date.now() + timeoutMs;

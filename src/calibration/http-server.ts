@@ -3,27 +3,34 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { fileURLToPath } from "node:url";
 
 import {
-  type CalibrationApplication,
   ContractValidationError,
   NotFoundError,
   UnavailableError,
 } from "./application.js";
 import { assertWorkspaceId, InvalidWorkspaceIdError } from "./domain.js";
+import type { CalibrationEngine } from "./engine-manager.js";
 import { ConflictError } from "./ports.js";
 import { redactSensitive } from "./redaction.js";
+import type { CalibrationJobQueue } from "./job-queue.js";
 
 const DEFAULT_WORKSPACE = "local-default";
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const CALIBRATION_HTML = fileURLToPath(new URL("../ui/calibration.html", import.meta.url));
 const CALIBRATION_CLIENT = fileURLToPath(new URL("../ui/calibration-client.js", import.meta.url));
 
-export interface CalibrationHttpServerOptions {
-  application: CalibrationApplication;
+export type CalibrationHttpServerOptions = {
   workspaceId?: string;
   host?: string;
   port?: number;
   allowNetwork?: boolean;
-}
+  publicOrigin?: string;
+  jobQueue?: CalibrationJobQueue;
+} & ({ application: CalibrationEngine; resolveApplication?: never; closeApplications?: never } | {
+  application?: never;
+  resolveApplication(request: IncomingMessage): Promise<{ application: CalibrationEngine; workspaceId: string;
+    identity?: { userId: string; tenantId: string } }>;
+  closeApplications(): Promise<void>;
+});
 
 export interface CalibrationUiHandle {
   server: Server;
@@ -31,7 +38,7 @@ export interface CalibrationUiHandle {
   close(): Promise<void>;
 }
 
-class HttpError extends Error {
+export class HttpError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
@@ -153,7 +160,7 @@ function assertRequestWorkspace(url: URL, body: Record<string, unknown> | undefi
   }
 }
 
-function requireNonce(request: IncomingMessage, application: CalibrationApplication): void {
+function requireNonce(request: IncomingMessage, application: CalibrationEngine): void {
   if (stringHeader(request.headers["x-calibration-nonce"]) !== application.getSessionNonce()) {
     throw new HttpError(409, "nonce_required", "calibration session nonce required");
   }
@@ -185,7 +192,7 @@ async function dispatch(
 ): Promise<void> {
   const configuredHost = options.host ?? "127.0.0.1";
   const localPort = request.socket.localPort ?? options.port ?? 0;
-  const expectedOrigin = `http://${urlHost(configuredHost)}:${localPort}`;
+  const expectedOrigin = options.publicOrigin ?? `http://${urlHost(configuredHost)}:${localPort}`;
   const host = stringHeader(request.headers.host);
   const origin = stringHeader(request.headers.origin);
   if (origin && origin !== expectedOrigin) {
@@ -193,14 +200,22 @@ async function dispatch(
     return;
   }
 
-  const url = new URL(request.url ?? "/", `http://${host ?? "localhost"}`);
   const method = request.method ?? "GET";
-  const application = options.application;
   try {
-    const workspaceId = options.workspaceId ?? DEFAULT_WORKSPACE;
+    let url: URL;
+    try { url = new URL(request.url ?? "/", `http://${host ?? "localhost"}`); }
+    catch { throw new HttpError(400, "malformed_url", "Invalid request URL or Host"); }
+    const selected = options.resolveApplication ? await options.resolveApplication(request) : {
+      application: options.application, workspaceId: options.workspaceId ?? DEFAULT_WORKSPACE, identity: undefined,
+    };
+    const { application, workspaceId } = selected;
+    assertWorkspaceId(workspaceId);
     assertRequestWorkspace(url, undefined, workspaceId);
+    if (options.resolveApplication && !url.pathname.startsWith("/api/v1/"))
+      throw new HttpError(404, "not_found", "API route not found");
     if (method === "GET" && url.pathname === "/api/v1/bootstrap") {
-      sendJson(response, 200, await application.getBootstrap(workspaceId));
+      const bootstrap = await application.getBootstrap(workspaceId);
+      sendJson(response, 200, selected.identity ? { ...bootstrap, identity: selected.identity } : bootstrap);
       return;
     }
     if (method === "GET" && url.pathname === "/api/v1/corpus") {
@@ -279,6 +294,58 @@ async function dispatch(
       return;
     }
     const executeMatch = /^\/api\/v1\/calibration-runs\/[^/]+\/execute$/.test(url.pathname);
+    const enqueueMatch = /^\/api\/v1\/calibration-runs\/[^/]+\/enqueue$/.test(url.pathname);
+    const jobMatch = /^\/api\/v1\/calibration-runs\/[^/]+\/job$/.test(url.pathname);
+    if (options.jobQueue && (enqueueMatch || jobMatch || executeMatch)) {
+      if (!selected.identity || !options.resolveApplication)
+        throw new HttpError(403, "authenticated_queue_required", "Authenticated queue required");
+      const identity = { ...selected.identity, workspaceId };
+      const runId = idFromPath(url.pathname);
+      if (method === "GET" && jobMatch) {
+        const job = await options.jobQueue.get(identity, runId);
+        if (!job) throw new NotFoundError("calibration job not found");
+        sendJson(response, 200, job);
+        return;
+      }
+      if (method === "POST" && (enqueueMatch || executeMatch)) {
+        requireNonce(request, application);
+        const body = await parseBody(request);
+        assertRequestWorkspace(url, body, workspaceId);
+        // Existing jobs need no MCP read: duplicates must remain responsive during calibration.
+        let job = await options.jobQueue.get(identity, runId);
+        if (!job || job.status === "awaiting_authentication") {
+          const run = await application.getRun(workspaceId, runId);
+          if (!run) throw new NotFoundError("calibration run not found");
+          job = await options.jobQueue.enqueue(identity, run, async () => {
+          const fresh = await options.resolveApplication!(request);
+          if (fresh.workspaceId !== workspaceId || fresh.identity?.tenantId !== identity.tenantId ||
+              fresh.identity?.userId !== identity.userId)
+            throw new HttpError(403, "workspace_forbidden", "Queued identity no longer authorized");
+          return fresh.application;
+          });
+        }
+        if (enqueueMatch) { sendJson(response, 202, job); return; }
+        let status = job.status;
+        while (status === "queued" || status === "running") {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          status = (await options.jobQueue.get(identity, runId))!.status;
+        }
+        if (status === "awaiting_authentication")
+          throw new HttpError(403, "queue_reauthentication_required", "Fresh authorization required for queued job");
+        if (status === "execution_unknown")
+          throw new HttpError(409, "execution_unknown", "Reconcile required; execution retry forbidden");
+        const fresh = await options.resolveApplication(request);
+        if (fresh.workspaceId !== workspaceId || fresh.identity?.tenantId !== identity.tenantId ||
+            fresh.identity?.userId !== identity.userId)
+          throw new HttpError(403, "workspace_forbidden", "Queued identity no longer authorized");
+        const result = await fresh.application.getRun(workspaceId, runId);
+        if (!result) throw new NotFoundError("calibration run not found");
+        const failure = result.status === "failed" ? executionHttpError(await fresh.application.getReport(workspaceId, runId)) : null;
+        if (failure) throw failure;
+        sendJson(response, 200, result);
+        return;
+      }
+    }
     if (method === "POST" && executeMatch) {
       requireNonce(request, application);
       const body = await parseBody(request);
@@ -354,6 +421,8 @@ export function isLoopbackHost(host: string): boolean {
 }
 
 export function createCalibrationServer(options: CalibrationHttpServerOptions): Server {
+  if (Boolean(options.application) === Boolean(options.resolveApplication))
+    throw new Error("Exactly one application source is required");
   const workspaceId = options.workspaceId === undefined ? DEFAULT_WORKSPACE : options.workspaceId;
   assertWorkspaceId(workspaceId);
   const fixedOptions = { ...options, workspaceId };
@@ -401,7 +470,8 @@ export async function startCalibrationUi(options: CalibrationHttpServerOptions):
     url,
     async close() {
       await new Promise<void>((resolve) => server.close(() => resolve()));
-      await options.application.close();
+      if (options.resolveApplication) await options.closeApplications();
+      else await options.application.close();
     },
   };
 }
