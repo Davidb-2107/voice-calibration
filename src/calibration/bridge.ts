@@ -212,9 +212,28 @@ class NodeMcpStdioTransport implements CalibrationTransport {
   ) {
     this.boundInstance = launch?.workspaceId !== undefined;
     this.launchEnv = this.boundInstance
-      ? Object.fromEntries(Object.entries(process.env).filter(([name]) =>
-          ["PATH", "Path", "PATHEXT", "SystemRoot", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "HOME",
-            "USERPROFILE", "APPDATA", "LOCALAPPDATA", "LANG", "LC_ALL", "PYTHONPATH", "PYTHONNOUSERSITE"].includes(name)))
+      ? Object.fromEntries(
+          Object.entries(process.env).filter(([name]) =>
+            [
+              "PATH",
+              "Path",
+              "PATHEXT",
+              "SystemRoot",
+              "SYSTEMROOT",
+              "WINDIR",
+              "TEMP",
+              "TMP",
+              "HOME",
+              "USERPROFILE",
+              "APPDATA",
+              "LOCALAPPDATA",
+              "LANG",
+              "LC_ALL",
+              "PYTHONPATH",
+              "PYTHONNOUSERSITE",
+            ].includes(name),
+          ),
+        )
       : { ...process.env };
     if (launch !== undefined) {
       delete this.launchEnv.VOICE_WPM_PATH;

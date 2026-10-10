@@ -70,7 +70,10 @@ export class EngineManager {
               if (result instanceof Promise) return result.finally(release);
               release();
               return result;
-            } catch (error) { release(); throw error; }
+            } catch (error) {
+              release();
+              throw error;
+            }
           };
         },
       });
@@ -93,9 +96,13 @@ export class EngineManager {
     const slot = this.slot(workspaceId);
     if (slot.stopping && slot.idleStopping) return slot.stopping.then(() => this.start(workspaceId));
     if (slot.stopping) return Promise.reject(new UnavailableError("Calibration engine stopping"));
-    if (slot.idleStopFailed) return Promise.reject(new UnavailableError("Automatic engine shutdown failed; explicit restart required"));
+    if (slot.idleStopFailed)
+      return Promise.reject(new UnavailableError("Automatic engine shutdown failed; explicit restart required"));
     if (slot.transition) return slot.transition;
-    if (slot.engine && !slot.blocked) { this.armIdle(slot); return Promise.resolve(); }
+    if (slot.engine && !slot.blocked) {
+      this.armIdle(slot);
+      return Promise.resolve();
+    }
     return this.replace(slot);
   }
 
@@ -110,7 +117,9 @@ export class EngineManager {
 
   private drain(slot: Slot): Promise<void> {
     if (slot.active === 0) return Promise.resolve();
-    return new Promise((resolve) => { slot.drained = resolve; });
+    return new Promise((resolve) => {
+      slot.drained = resolve;
+    });
   }
 
   private clearIdle(slot: Slot): void {
@@ -126,15 +135,23 @@ export class EngineManager {
       if (this.closed || slot.blocked || slot.active || slot.transition || slot.stopping || !slot.engine) return;
       slot.idleStopping = true;
       // A failed automatic shutdown stays blocked until explicit supervision.
-      void this.stop(slot).catch(() => { slot.idleStopFailed = true; })
-        .finally(() => { slot.idleStopping = false; });
+      void this.stop(slot)
+        .catch(() => {
+          slot.idleStopFailed = true;
+        })
+        .finally(() => {
+          slot.idleStopping = false;
+        });
     }, this.idleTimeoutMs);
     slot.idleTimer.unref?.();
   }
 
   private async acquireStartup(): Promise<() => void> {
     if (this.starting < this.maxConcurrentStarts) this.starting++;
-    else await new Promise<void>((resolve) => { this.startupQueue.push(resolve); });
+    else
+      await new Promise<void>((resolve) => {
+        this.startupQueue.push(resolve);
+      });
     return () => {
       const next = this.startupQueue.shift();
       if (next) next();
@@ -159,10 +176,14 @@ export class EngineManager {
         if (this.closed || slot.stopping) return;
         slot.engine = await slot.create();
         slot.blocked = false;
-      } finally { release(); }
+      } finally {
+        release();
+      }
     })();
     slot.transition = transition.finally(() => {
-      slot.transition = undefined; slot.drained = undefined; this.armIdle(slot);
+      slot.transition = undefined;
+      slot.drained = undefined;
+      this.armIdle(slot);
     });
     return slot.transition;
   }
@@ -175,8 +196,15 @@ export class EngineManager {
       await slot.transition?.catch(() => undefined);
       slot.blocked = true;
       await this.drain(slot);
-      if (slot.engine) { await slot.engine.close(); slot.engine = undefined; slot.idleStopFailed = false; }
-    })().finally(() => { slot.stopping = undefined; slot.drained = undefined; });
+      if (slot.engine) {
+        await slot.engine.close();
+        slot.engine = undefined;
+        slot.idleStopFailed = false;
+      }
+    })().finally(() => {
+      slot.stopping = undefined;
+      slot.drained = undefined;
+    });
     return slot.stopping;
   }
 
@@ -186,7 +214,11 @@ export class EngineManager {
     this.closing = (async () => {
       const results = await Promise.allSettled([...this.slots.values()].map((slot) => this.stop(slot)));
       const errors = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
-      if (errors.length) throw new AggregateError(errors.map((result) => result.reason), "Engine shutdown failed");
+      if (errors.length)
+        throw new AggregateError(
+          errors.map((result) => result.reason),
+          "Engine shutdown failed",
+        );
     })();
     return this.closing;
   }

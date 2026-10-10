@@ -2,16 +2,12 @@ import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { fileURLToPath } from "node:url";
 
-import {
-  ContractValidationError,
-  NotFoundError,
-  UnavailableError,
-} from "./application.js";
+import { ContractValidationError, NotFoundError, UnavailableError } from "./application.js";
 import { assertWorkspaceId, InvalidWorkspaceIdError } from "./domain.js";
 import type { CalibrationEngine } from "./engine-manager.js";
+import type { CalibrationJobQueue } from "./job-queue.js";
 import { ConflictError } from "./ports.js";
 import { redactSensitive } from "./redaction.js";
-import type { CalibrationJobQueue } from "./job-queue.js";
 
 const DEFAULT_WORKSPACE = "local-default";
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
@@ -25,12 +21,18 @@ export type CalibrationHttpServerOptions = {
   allowNetwork?: boolean;
   publicOrigin?: string;
   jobQueue?: CalibrationJobQueue;
-} & ({ application: CalibrationEngine; resolveApplication?: never; closeApplications?: never } | {
-  application?: never;
-  resolveApplication(request: IncomingMessage): Promise<{ application: CalibrationEngine; workspaceId: string;
-    identity?: { userId: string; tenantId: string } }>;
-  closeApplications(): Promise<void>;
-});
+} & (
+  | { application: CalibrationEngine; resolveApplication?: never; closeApplications?: never }
+  | {
+      application?: never;
+      resolveApplication(request: IncomingMessage): Promise<{
+        application: CalibrationEngine;
+        workspaceId: string;
+        identity?: { userId: string; tenantId: string };
+      }>;
+      closeApplications(): Promise<void>;
+    }
+);
 
 export interface CalibrationUiHandle {
   server: Server;
@@ -203,11 +205,18 @@ async function dispatch(
   const method = request.method ?? "GET";
   try {
     let url: URL;
-    try { url = new URL(request.url ?? "/", `http://${host ?? "localhost"}`); }
-    catch { throw new HttpError(400, "malformed_url", "Invalid request URL or Host"); }
-    const selected = options.resolveApplication ? await options.resolveApplication(request) : {
-      application: options.application, workspaceId: options.workspaceId ?? DEFAULT_WORKSPACE, identity: undefined,
-    };
+    try {
+      url = new URL(request.url ?? "/", `http://${host ?? "localhost"}`);
+    } catch {
+      throw new HttpError(400, "malformed_url", "Invalid request URL or Host");
+    }
+    const selected = options.resolveApplication
+      ? await options.resolveApplication(request)
+      : {
+          application: options.application,
+          workspaceId: options.workspaceId ?? DEFAULT_WORKSPACE,
+          identity: undefined,
+        };
     const { application, workspaceId } = selected;
     assertWorkspaceId(workspaceId);
     assertRequestWorkspace(url, undefined, workspaceId);
@@ -317,14 +326,20 @@ async function dispatch(
           const run = await application.getRun(workspaceId, runId);
           if (!run) throw new NotFoundError("calibration run not found");
           job = await options.jobQueue.enqueue(identity, run, async () => {
-          const fresh = await options.resolveApplication!(request);
-          if (fresh.workspaceId !== workspaceId || fresh.identity?.tenantId !== identity.tenantId ||
-              fresh.identity?.userId !== identity.userId)
-            throw new HttpError(403, "workspace_forbidden", "Queued identity no longer authorized");
-          return fresh.application;
+            const fresh = await options.resolveApplication!(request);
+            if (
+              fresh.workspaceId !== workspaceId ||
+              fresh.identity?.tenantId !== identity.tenantId ||
+              fresh.identity?.userId !== identity.userId
+            )
+              throw new HttpError(403, "workspace_forbidden", "Queued identity no longer authorized");
+            return fresh.application;
           });
         }
-        if (enqueueMatch) { sendJson(response, 202, job); return; }
+        if (enqueueMatch) {
+          sendJson(response, 202, job);
+          return;
+        }
         let status = job.status;
         while (status === "queued" || status === "running") {
           await new Promise((resolve) => setTimeout(resolve, 100));
@@ -335,12 +350,16 @@ async function dispatch(
         if (status === "execution_unknown")
           throw new HttpError(409, "execution_unknown", "Reconcile required; execution retry forbidden");
         const fresh = await options.resolveApplication(request);
-        if (fresh.workspaceId !== workspaceId || fresh.identity?.tenantId !== identity.tenantId ||
-            fresh.identity?.userId !== identity.userId)
+        if (
+          fresh.workspaceId !== workspaceId ||
+          fresh.identity?.tenantId !== identity.tenantId ||
+          fresh.identity?.userId !== identity.userId
+        )
           throw new HttpError(403, "workspace_forbidden", "Queued identity no longer authorized");
         const result = await fresh.application.getRun(workspaceId, runId);
         if (!result) throw new NotFoundError("calibration run not found");
-        const failure = result.status === "failed" ? executionHttpError(await fresh.application.getReport(workspaceId, runId)) : null;
+        const failure =
+          result.status === "failed" ? executionHttpError(await fresh.application.getReport(workspaceId, runId)) : null;
         if (failure) throw failure;
         sendJson(response, 200, result);
         return;

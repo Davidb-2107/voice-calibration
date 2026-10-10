@@ -31,7 +31,8 @@ export interface CalibrationUiOptions {
 }
 
 export async function createVoiceCalibrationApplication(
-  options: CalibrationUiOptions = {}, onExit?: () => void,
+  options: CalibrationUiOptions = {},
+  onExit?: () => void,
 ): Promise<CalibrationApplication> {
   const workspaceId = options.workspaceId === undefined ? "local-default" : options.workspaceId;
   assertWorkspaceId(workspaceId);
@@ -126,7 +127,10 @@ export async function createVoiceCalibrationApplication(
   const configurationIdentity =
     secret === undefined
       ? undefined
-      : fingerprintConfiguration({ tenantId: options.tenantId, workspaceId, provider: "elevenlabs", wpmPath, stateDir }, secret);
+      : fingerprintConfiguration(
+          { tenantId: options.tenantId, workspaceId, provider: "elevenlabs", wpmPath, stateDir },
+          secret,
+        );
   const bridge = createCalibrationBridge({
     credentials,
     wpmPath,
@@ -170,11 +174,22 @@ export async function startVoiceCalibrationUi(options: CalibrationUiOptions = {}
   });
   try {
     if (exited) throw new Error("MCP process exited; restart the calibration instance");
-    ui = await startCalibrationUi({ application, workspaceId: options.workspaceId,
-      host: options.host, port: options.port ?? 0, allowNetwork: options.allowNetwork });
-    if (exited) { await ui.close(); throw new Error("MCP process exited; restart the calibration instance"); }
+    ui = await startCalibrationUi({
+      application,
+      workspaceId: options.workspaceId,
+      host: options.host,
+      port: options.port ?? 0,
+      allowNetwork: options.allowNetwork,
+    });
+    if (exited) {
+      await ui.close();
+      throw new Error("MCP process exited; restart the calibration instance");
+    }
     return ui;
-  } catch (error) { await application.close(); throw error; }
+  } catch (error) {
+    await application.close();
+    throw error;
+  }
 }
 
 export function openInBrowser(target: string): void {
