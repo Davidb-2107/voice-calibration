@@ -200,9 +200,12 @@ export async function startSupabaseCalibrationApi(
       )
         throw new Error("Isolated engine binding mismatch");
       for (const other of fixed.filter((item) => item.workspaceId !== workspace.workspaceId))
-        for (const path of [other.dataDir, other.stateDir, dirname(other.wpmPath)])
-          if (contains(transport.hostRoot, path) || contains(path, transport.hostRoot))
-            throw new Error("Engine mount overlaps another workspace");
+        for (const path of [other.dataDir, other.stateDir, dirname(other.wpmPath),
+          ...(other.mcpTransport instanceof DockerMcpStdioTransport
+            ? [other.mcpTransport.hostRoot, ...(other.mcpTransport.binding.restoreGuardDir ? [other.mcpTransport.binding.restoreGuardDir] : [])] : [])])
+          for (const mounted of [transport.hostRoot, ...(binding.restoreGuardDir ? [binding.restoreGuardDir] : [])])
+            if (contains(mounted, path) || contains(path, mounted))
+              throw new Error("Engine mount overlaps another workspace");
     }
   }
   if (options.jobQueue) {
@@ -214,7 +217,8 @@ export async function startSupabaseCalibrationApi(
         workspace.dataDir,
         workspace.stateDir,
         dirname(workspace.wpmPath),
-        ...(workspace.mcpTransport instanceof DockerMcpStdioTransport ? [workspace.mcpTransport.hostRoot] : []),
+        ...(workspace.mcpTransport instanceof DockerMcpStdioTransport ? [workspace.mcpTransport.hostRoot,
+          ...(workspace.mcpTransport.binding.restoreGuardDir ? [workspace.mcpTransport.binding.restoreGuardDir] : [])] : []),
       ])
         if (contains(queueDir, path) || contains(path, queueDir))
           throw new Error("Queue directory overlaps workspace resources");

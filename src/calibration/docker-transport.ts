@@ -16,6 +16,7 @@ export interface DockerEngineOptions {
   wpmPath: string;
   stateDir: string;
   uiWorkspaceDir: string;
+  restoreGuardDir?: string;
 }
 
 export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
@@ -47,6 +48,14 @@ export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
     };
     const writable = [canonicalLocalPath(options.stateDir), dirname(canonicalLocalPath(options.wpmPath))];
     const ui = canonicalLocalPath(options.uiWorkspaceDir);
+    const restoreGuard = options.restoreGuardDir ? canonicalLocalPath(options.restoreGuardDir) : undefined;
+    if (restoreGuard) {
+      for (const [parent, child] of [[root, restoreGuard], [restoreGuard, root]]) {
+        const part = relative(parent, child);
+        if (restoreGuard.includes(",") || !part || (part !== ".." && !part.startsWith(`..${sep}`) && !isAbsolute(part)))
+          throw new Error("Restore control must be outside the restored workspace");
+      }
+    }
     for (const path of writable) {
       inside(path);
       for (const [parent, child] of [
@@ -80,6 +89,11 @@ export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
       ...writable.flatMap((path) => ["--mount", `type=bind,src=${path},dst=${inside(path)}`]),
       "--mount",
       `type=bind,src=${join(ui, ".instance.lock")},dst=${launch.uiWorkspaceDir}/.instance.lock`,
+      ...(restoreGuard ? ["--mount", `type=bind,src=${restoreGuard},dst=/restore-control,readonly`,
+        "--mount", `type=bind,src=${join(restoreGuard, "provider-registry")},dst=/provider-registry`,
+        "--env", "VOICE_CALIBRATION_RESTORE_GUARD_PATH=/restore-control/guard.json",
+        "--env", "VOICE_CALIBRATION_PROVIDER_REGISTRY_DIR=/provider-registry",
+        "--env", "VOICE_CALIBRATION_PROVIDER_REGISTRY_KEY=/restore-control/provider-registry.key"] : []),
       "--env",
       "HOME=/tmp",
       "--env",
@@ -106,6 +120,7 @@ export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
       wpmPath: canonicalLocalPath(options.wpmPath),
       stateDir: canonicalLocalPath(options.stateDir),
       uiWorkspaceDir: canonicalLocalPath(options.uiWorkspaceDir),
+      restoreGuardDir: restoreGuard,
     });
     this.containerName = containerName;
     this.corpusPath = launch.wpmPath;
@@ -118,6 +133,11 @@ export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
       await mkdir(this.binding.uiWorkspaceDir, { recursive: true });
       const lockPath = join(this.binding.uiWorkspaceDir, ".instance.lock");
       await assertNoSymlinkWithin(this.hostRoot, lockPath);
+      if (this.binding.restoreGuardDir) {
+        await assertNoSymlinkWithin(this.binding.restoreGuardDir, join(this.binding.restoreGuardDir, "guard.json"));
+        await assertNoSymlinkWithin(this.binding.restoreGuardDir, join(this.binding.restoreGuardDir, "provider-registry", "provider.sqlite3"));
+        await assertNoSymlinkWithin(this.binding.restoreGuardDir, join(this.binding.restoreGuardDir, "provider-registry.key"));
+      }
       const lock = await open(lockPath, constants.O_CREAT | constants.O_RDWR | (constants.O_NOFOLLOW ?? 0), 0o600);
       await lock.close();
     })();
