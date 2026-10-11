@@ -65,6 +65,7 @@ try {
   await restarted.close();
   await transports[0].close();
   const api = await startSupabaseCalibrationApi({
+    idleTimeoutMs: 1000,
     supabase: hosted?.supabase ?? { url: 'https://isolation-test.supabase.co', publishableKey: 'sb_publishable_offline_fixture',
       fetch: async (url, request) => {
         const suffix = request.headers.authorization === 'Bearer fixture-a' ? 'a' : 'b';
@@ -105,10 +106,19 @@ try {
         headers: { authorization: `Bearer ${token(other)}` } });
       strictEqual(denied.status, 404);
       strictEqual(Object.keys(JSON.parse(readFileSync((suffix === 'a' ? a : b).wpmPath, 'utf8'))).length, 0);
+      for (let cycle = 0; cycle < 2; cycle++) {
+        // Allow the actual container to stop, then wake through the same API handle.
+        await new Promise(resolve => setTimeout(resolve, 1800));
+        const responses = await Promise.all([call('bootstrap'), call('bootstrap')]);
+        deepStrictEqual(responses.map(response => response.identity.tenantId), [tenantId(suffix), tenantId(suffix)]);
+        strictEqual((await call(`calibration-runs/${run.id}`)).id, run.id);
+        const persisted = await call('corpus/draft');
+        strictEqual(persisted.items[0].text, text);
+      }
     }
   } finally { await api.close(); }
   const report = { status: 'PASS', reports, crashIsolation: 'PASS', restartPersistence: 'PASS',
-    apiDockerDryRun: 'PASS', crossRunReads: '404 both directions', approval: 'none',
+    apiDockerDryRun: 'PASS', apiIdleWakeCyclesPerWorkspace: 2, crossRunReads: '404 both directions', approval: 'none',
     authentication: hosted ? 'real hosted Supabase' : 'simulated Supabase', paidCalls: 0, image };
   writeFileSync(join(root, 'report.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify({ status: 'PASS', evidence: join(root, 'report.json'), paidCalls: 0 }));

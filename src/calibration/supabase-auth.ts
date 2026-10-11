@@ -210,7 +210,12 @@ export async function startSupabaseCalibrationApi(
       throw new Error("Explicit queue directory required");
     const queueDir = canonicalLocalPath(options.jobQueue.dataDir);
     for (const workspace of fixed)
-      for (const path of [workspace.dataDir, workspace.stateDir, dirname(workspace.wpmPath)])
+      for (const path of [
+        workspace.dataDir,
+        workspace.stateDir,
+        dirname(workspace.wpmPath),
+        ...(workspace.mcpTransport instanceof DockerMcpStdioTransport ? [workspace.mcpTransport.hostRoot] : []),
+      ])
         if (contains(queueDir, path) || contains(path, queueDir))
           throw new Error("Queue directory overlaps workspace resources");
   }
@@ -219,7 +224,14 @@ export async function startSupabaseCalibrationApi(
   const engines = new EngineManager(
     fixed.map((workspace) => ({
       workspaceId: workspace.workspaceId,
-      create: () => createVoiceCalibrationApplication(workspace),
+      create: () =>
+        createVoiceCalibrationApplication({
+          ...workspace,
+          mcpTransport:
+            workspace.mcpTransport instanceof DockerMcpStdioTransport
+              ? new DockerMcpStdioTransport(workspace.mcpTransport.binding)
+              : workspace.mcpTransport,
+        }),
     })),
     {
       maxConcurrentStarts: options.maxConcurrentStarts,

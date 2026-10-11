@@ -76,24 +76,38 @@ values ('<user-a-uuid>', 'tenant-a'), ('<user-b-uuid>', 'tenant-b');
    forwarded identity headers. Bind the worker/server to a private interface.
 
 ```js
-import { startSupabaseCalibrationApi } from 'voice-calibration';
+import { join } from 'node:path';
+import { DockerMcpStdioTransport, startSupabaseCalibrationApi } from 'voice-calibration';
+const image = process.env.CALIBRATION_ENGINE_IMAGE; // Immutable local sha256:... image ID.
+const workspaces = ['a', 'b'].map(suffix => {
+  const root = `/srv/calibration/${suffix}`;
+  const workspace = {
+    tenantId: `tenant-${suffix}`, workspaceId: `workspace-${suffix}`,
+    dataDir: join(root, 'ui'), stateDir: join(root, 'state'),
+    wpmPath: join(root, 'corpus', 'voice_wpm.json'),
+    credentials: { envFile: `/run/secrets/${suffix}.env` },
+  };
+  return { ...workspace, mcpTransport: new DockerMcpStdioTransport({
+    root, image, tenantId: workspace.tenantId, workspaceId: workspace.workspaceId,
+    wpmPath: workspace.wpmPath, stateDir: workspace.stateDir,
+    uiWorkspaceDir: join(workspace.dataDir, 'workspaces', workspace.workspaceId),
+  }) };
+});
 const api = await startSupabaseCalibrationApi({
   supabase: { url: process.env.SUPABASE_URL,
     publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY },
   host: '127.0.0.1', port: 8787, publicOrigin: 'https://calibration.example.com',
   jobQueue: { dataDir: '/srv/calibration/jobs', maxConcurrentJobs: 4 },
-  workspaces: [
-    { tenantId: 'tenant-a', workspaceId: 'workspace-a',
-      dataDir: '/srv/calibration/a/ui', stateDir: '/srv/calibration/a/state',
-      wpmPath: '/srv/calibration/a/voice_wpm.json', credentials: { envFile: '/run/secrets/a.env' } },
-    { tenantId: 'tenant-b', workspaceId: 'workspace-b',
-      dataDir: '/srv/calibration/b/ui', stateDir: '/srv/calibration/b/state',
-      wpmPath: '/srv/calibration/b/voice_wpm.json', credentials: { envFile: '/run/secrets/b.env' } },
-  ],
+  workspaces,
 });
 ```
 
 Install the accompanying Python tenant adapter before using this entrypoint.
+Prebuild the immutable Docker image and provision each private root with its
+corpus file and writable directories accessible to container UID/GID 10001.
+The API constructs a fresh Docker transport from the validated binding on every
+wake. Keep the global queue outside every engine mount. Engines use
+`--network=none`: this configuration supports free checks, not real synthesis.
 The optional [durable job queue](job-queue.md) limits executions and revalidates
 authorization before dispatch. Its private directory must not overlap a workspace.
 After restart waiting jobs require fresh authentication; interrupted executions

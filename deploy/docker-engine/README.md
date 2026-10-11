@@ -22,6 +22,8 @@ await startSupabaseCalibrationApi({ supabase, workspaces: [{
 
 Tous les chemins de cette entrée doivent être sous `privateRoot`, dans un répertoire propre à ce workspace. La configuration est fournie par le serveur ; le client ne choisit aucun chemin, image ou credentials. Les chemins internes du moteur sont distincts des chemins hôte de l'API, et l'identité MCP reste vérifiée.
 
+L'API utilise le binding immuable de ce transport pour construire une instance neuve à chaque démarrage ou réveil. La file globale doit rester hors de toutes les racines montées. Sur Linux, provisionner les répertoires persistants avec des droits d'accès pour l'UID/GID 10001 et un corpus JSON valide avant la première requête.
+
 Le transport fixe : utilisateur 10001, rootfs en lecture seule, capabilities supprimées, no-new-privileges, tmpfs privé de 64 MiB, mémoire 512 MiB, 1 CPU, 64 PID. Ces limites sont des valeurs de validation, pas une capacité commerciale mesurée. Chaque conteneur est supprimé à sa fermeture ; les données sous la racine montée persistent.
 
 **Réseau désactivé (`--network=none`)** : ce mode exécute les contrôles gratuits et bloque les appels fournisseur. Il ne peut pas synthétiser réellement. L'ouverture des sorties ElevenLabs devra être une étape distincte avec une politique d'egress et les autorisations de dépense ; ne pas remplacer ce réglage par le réseau hôte.

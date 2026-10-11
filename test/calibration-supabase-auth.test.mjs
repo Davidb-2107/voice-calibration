@@ -8,6 +8,7 @@ import { request as httpRequest } from "node:http";
 import { createSupabaseWorkspaceResolver, startSupabaseCalibrationApi as startApi, validateTenantWorkspaces } from "../dist/calibration/supabase-auth.js";
 const startSupabaseCalibrationApi = (options) => startApi({ allowUnisolatedLocal: true, ...options });
 import { startCalibrationUi } from "../dist/calibration/http-server.js";
+import { DockerMcpStdioTransport } from "../dist/calibration/docker-transport.js";
 import { createLocalStore } from "../dist/calibration/ports.js";
 import { fingerprintConfiguration } from "../dist/calibration/fingerprint.js";
 import { fakeBridge, fakeCanonicalProfilePort, makeApplication } from "./calibration-api.test.mjs";
@@ -16,6 +17,30 @@ const authConfig = { url: "https://test-project.supabase.co", publishableKey: "s
 const userA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const userB = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const request = (token) => ({ headers: { ...(token === undefined ? {} : { authorization: `Bearer ${token}` }) } });
+
+test("global queue cannot overlap an isolated engine mount", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "supabase-mount-queue-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const privateRoot = join(root, "a");
+  mkdirSync(privateRoot);
+  const workspace = { tenantId: "tenant-a", workspaceId: "workspace-a",
+    dataDir: join(privateRoot, "ui"), stateDir: join(privateRoot, "state"),
+    wpmPath: join(privateRoot, "corpus", "wpm.json"), credentials: { env: {} } };
+  workspace.mcpTransport = new DockerMcpStdioTransport({
+    image: `sha256:${"0".repeat(64)}`, root: privateRoot, ...workspace,
+    uiWorkspaceDir: join(workspace.dataDir, "workspaces", workspace.workspaceId),
+  });
+  const supabase = { ...authConfig, fetch: () => { throw new Error("Unexpected Auth access"); } };
+  for (const dataDir of [privateRoot, join(privateRoot, "jobs"), root]) {
+    await rejects(async () => {
+      const api = await startApi({ supabase, workspaces: [workspace], jobQueue: { dataDir } });
+      await api.close();
+    }, /Queue directory overlaps/);
+    strictEqual(existsSync(join(dataDir, "owner.lock")), false);
+  }
+  const api = await startApi({ supabase, workspaces: [workspace], jobQueue: { dataDir: join(root, "jobs") } });
+  await api.close();
+});
 
 function simulatedSupabase() {
   const members = new Map([["alice", { id: "workspace-a", tenant_id: "tenant-a" }],
@@ -38,6 +63,61 @@ function simulatedSupabase() {
     return Response.json(members.has(token) ? [members.get(token)] : []);
   } };
 }
+
+test("protected Docker API recreates its transport after each idle stop", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "supabase-docker-wake-"));
+  const started = [];
+  const closed = new Set();
+  t.mock.method(DockerMcpStdioTransport.prototype, "schema", async function () {
+    if (closed.has(this)) throw new Error("Closed transport reused");
+    started.push(this);
+    return { type: "object" };
+  });
+  t.mock.method(DockerMcpStdioTransport.prototype, "callTool", async function (name) {
+    strictEqual(name, "get_server_info");
+    return { emitted: true, response: { tenant_id: "tenant-a", workspace_id: "workspace-a",
+      state_dir: this.instanceStateDir } };
+  });
+  t.mock.method(DockerMcpStdioTransport.prototype, "close", async function () { closed.add(this); });
+  const workspace = { tenantId: "tenant-a", workspaceId: "workspace-a", dataDir: join(root, "ui"),
+    stateDir: join(root, "state"), wpmPath: join(root, "corpus", "wpm.json"),
+    credentials: { env: { ELEVENLABS_API_KEY: "fake-wake" } } };
+  mkdirSync(join(root, "corpus"));
+  writeFileSync(workspace.wpmPath, "{}");
+  workspace.mcpTransport = new DockerMcpStdioTransport({ root, image: `sha256:${"0".repeat(64)}`,
+    ...workspace, uiWorkspaceDir: join(workspace.dataDir, "workspaces", workspace.workspaceId) });
+  const api = await startApi({ supabase: { ...authConfig, fetch: simulatedSupabase().fetch },
+    workspaces: [workspace], idleTimeoutMs: 50 });
+  try {
+    for (let cycle = 0; cycle < 3; cycle++) {
+      const responses = await Promise.all(Array.from({ length: 2 }, () => fetch(`${api.url}/api/v1/bootstrap`,
+        { headers: { authorization: "Bearer alice" } })));
+      deepStrictEqual(responses.map(response => response.status), [200, 200]);
+      const body = await responses[0].json();
+      strictEqual(body.identity.tenantId, "tenant-a");
+      const headers = { authorization: "Bearer alice" };
+      const draft = await (await fetch(`${api.url}/api/v1/corpus/draft`, { headers })).json();
+      if (cycle === 0) {
+        const saved = await fetch(`${api.url}/api/v1/corpus/draft`, { method: "PUT",
+          headers: { ...headers, "content-type": "application/json", "x-calibration-nonce": body.sessionNonce,
+            "if-match": String(draft.revision) },
+          body: JSON.stringify({ ...draft, items: [{ id: "persistent", order: 0, text: "Persistent corpus" }] }) });
+        strictEqual(saved.status, 200);
+      } else strictEqual(draft.items[0].text, "Persistent corpus");
+      strictEqual(started.length, cycle + 1);
+      deepStrictEqual(started[cycle].binding, workspace.mcpTransport.binding);
+      const deadline = Date.now() + 2000;
+      while (!closed.has(started[cycle]) && Date.now() < deadline)
+        await new Promise(resolve => setTimeout(resolve, 10));
+      strictEqual(closed.has(started[cycle]), true);
+    }
+    strictEqual(new Set(started).size, 3);
+    strictEqual(new Set(started.map(transport => transport.containerName)).size, 3);
+  } finally {
+    await api.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("Supabase resolves verified identity and fresh membership, never client metadata", async () => {
   const supabase = simulatedSupabase();

@@ -87,5 +87,6 @@ than the global API boot. All protected routes currently wake their workspace;
 engine-free durable reads are not implemented. The optional [durable job queue](job-queue.md)
 now limits executions separately from startup permits and revalidates authorization at dispatch.
 `IDLE-ENGINE-VALIDATION.md` records automatic idle shutdown, busy protection and
-durable stop/wake checks with a short experimental timeout. An injected transport must be recreated by its owning factory
+durable stop/wake checks with a short experimental timeout. The protected API recreates Docker transports from their
+validated immutable bindings on every wake. Custom local fixture transports must still be recreated by their owning factory
 for a stop/wake cycle; production default transports are created per application.
