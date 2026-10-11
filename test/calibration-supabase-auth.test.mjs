@@ -68,9 +68,13 @@ test("protected Docker API recreates its transport after each idle stop", async 
   const root = mkdtempSync(join(tmpdir(), "supabase-docker-wake-"));
   const started = [];
   const closed = new Set();
+  t.mock.method(DockerMcpStdioTransport.prototype, "readCorpus", async function (secret) {
+    await this.schema(secret);
+    return "{}";
+  });
   t.mock.method(DockerMcpStdioTransport.prototype, "schema", async function () {
     if (closed.has(this)) throw new Error("Closed transport reused");
-    started.push(this);
+    if (!started.includes(this)) started.push(this);
     return { type: "object" };
   });
   t.mock.method(DockerMcpStdioTransport.prototype, "callTool", async function (name) {

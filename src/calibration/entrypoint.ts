@@ -11,6 +11,7 @@ import {
   findVaultRoot,
   parseDotEnv,
 } from "./credentials.js";
+import { DockerMcpStdioTransport } from "./docker-transport.js";
 import { assertWorkspaceId } from "./domain.js";
 import { fingerprintConfiguration } from "./fingerprint.js";
 import { type CalibrationUiHandle, startCalibrationUi } from "./http-server.js";
@@ -94,6 +95,8 @@ export async function createVoiceCalibrationApplication(
   }
 
   let wpmPath: string | undefined;
+  const isolatedTransport = options.mcpTransport instanceof DockerMcpStdioTransport ? options.mcpTransport : undefined;
+  const readCorpus = isolatedTransport ? () => isolatedTransport.readCorpus(secret!) : undefined;
   const vault = findVaultRoot(cwd);
   const historicalWpmPath = vault ? resolve(vault, "Shared", "voice-calibration", "voice_wpm.json") : undefined;
   if (suppliedWpmPath !== undefined) {
@@ -101,8 +104,9 @@ export async function createVoiceCalibrationApplication(
     wpmPath = resolve(cwd, suppliedWpmPath);
     let corpus: unknown;
     try {
-      corpus = JSON.parse(readFileSync(wpmPath, "utf8"));
+      corpus = JSON.parse(readCorpus ? await readCorpus() : readFileSync(wpmPath, "utf8"));
     } catch {
+      await isolatedTransport?.close();
       throw new Error("WPM file is unavailable or invalid");
     }
     if (
@@ -113,6 +117,7 @@ export async function createVoiceCalibrationApplication(
         ([key, value]) => !key.startsWith("_") && (!value || typeof value !== "object" || Array.isArray(value)),
       )
     ) {
+      await isolatedTransport?.close();
       throw new Error("Invalid WPM corpus");
     }
   } else {
@@ -121,7 +126,7 @@ export async function createVoiceCalibrationApplication(
   }
   const referenceBase =
     wpmPath && wpmPath === historicalWpmPath ? "Shared/voice-calibration/voice_wpm.json" : undefined;
-  if (boundInstance && wpmPath) wpmPath = canonicalLocalPath(wpmPath);
+  if (boundInstance && wpmPath && !isolatedTransport) wpmPath = canonicalLocalPath(wpmPath);
   const language = environment.VOICE_CALIBRATION_LANGUAGE === "en" ? "en" : "fr";
   const credentials = createCredentialProvider({ env: secret === undefined ? {} : { ELEVENLABS_API_KEY: secret } });
   const configurationIdentity =
@@ -144,7 +149,7 @@ export async function createVoiceCalibrationApplication(
     repositories: createLocalStore(resolvedDataDir),
     configurationIdentity,
     bridge,
-    canonical: createCanonicalProfilePort({ wpmPath, language, referenceBase }),
+    canonical: createCanonicalProfilePort({ wpmPath, language, referenceBase, readCorpus }),
     credentials,
     voiceDirectory: createVoiceDirectoryProvider({ credentials }),
   });

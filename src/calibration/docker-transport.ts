@@ -1,10 +1,12 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { isAbsolute, relative, sep } from "node:path";
+import { constants } from "node:fs";
+import { mkdir, open } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { promisify } from "node:util";
 import { NodeMcpStdioTransport } from "./bridge.js";
 import { assertWorkspaceId } from "./domain.js";
-import { canonicalLocalPath } from "./local-store.js";
+import { assertNoSymlinkWithin, canonicalLocalPath } from "./local-store.js";
 
 export interface DockerEngineOptions {
   image: string;
@@ -21,6 +23,8 @@ export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
   readonly hostRoot: string;
   readonly binding: DockerEngineOptions;
   private readonly containerName: string;
+  private readonly corpusPath: string;
+  private prepared?: Promise<void>;
 
   constructor(options: DockerEngineOptions) {
     assertWorkspaceId(options.tenantId);
@@ -41,6 +45,19 @@ export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
       stateDir: inside(options.stateDir),
       uiWorkspaceDir: inside(options.uiWorkspaceDir),
     };
+    const writable = [canonicalLocalPath(options.stateDir), dirname(canonicalLocalPath(options.wpmPath))];
+    const ui = canonicalLocalPath(options.uiWorkspaceDir);
+    for (const path of writable) {
+      inside(path);
+      for (const [parent, child] of [
+        [path, ui],
+        [ui, path],
+      ]) {
+        const part = relative(parent, child);
+        if (!part || (part !== ".." && !part.startsWith(`..${sep}`) && !isAbsolute(part)))
+          throw new Error("Writable engine resources overlap protected UI");
+      }
+    }
     const containerName = `calibration-engine-${randomUUID()}`;
     const args = [
       "run",
@@ -59,7 +76,10 @@ export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
       "--pids-limit=64",
       "--tmpfs=/tmp:rw,nosuid,nodev,size=64m,uid=10001,gid=10001",
       "--mount",
-      `type=bind,src=${root},dst=/workspace`,
+      `type=bind,src=${root},dst=/workspace,readonly`,
+      ...writable.flatMap((path) => ["--mount", `type=bind,src=${path},dst=${inside(path)}`]),
+      "--mount",
+      `type=bind,src=${join(ui, ".instance.lock")},dst=${launch.uiWorkspaceDir}/.instance.lock`,
       "--env",
       "HOME=/tmp",
       "--env",
@@ -88,6 +108,40 @@ export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
       uiWorkspaceDir: canonicalLocalPath(options.uiWorkspaceDir),
     });
     this.containerName = containerName;
+    this.corpusPath = launch.wpmPath;
+  }
+
+  override async schema(secret: string, timeoutMs: number): Promise<unknown> {
+    this.prepared ??= (async () => {
+      await mkdir(this.binding.stateDir, { recursive: true });
+      await mkdir(dirname(this.binding.wpmPath), { recursive: true });
+      await mkdir(this.binding.uiWorkspaceDir, { recursive: true });
+      const lockPath = join(this.binding.uiWorkspaceDir, ".instance.lock");
+      await assertNoSymlinkWithin(this.hostRoot, lockPath);
+      const lock = await open(lockPath, constants.O_CREAT | constants.O_RDWR | (constants.O_NOFOLLOW ?? 0), 0o600);
+      await lock.close();
+    })();
+    await this.prepared;
+    return super.schema(secret, timeoutMs);
+  }
+
+  async readCorpus(secret: string): Promise<string> {
+    await this.schema(secret, 10_000);
+    // Resolve mutable workspace paths only inside its private mount namespace.
+    const result = await promisify(execFile)(
+      "docker",
+      [
+        "exec",
+        this.containerName,
+        "/opt/venv/bin/python",
+        "-I",
+        "-c",
+        'import sys; from pathlib import Path; sys.stdout.write(Path(sys.argv[1]).read_text(encoding="utf-8"))',
+        this.corpusPath,
+      ],
+      { timeout: 10_000, maxBuffer: Infinity },
+    );
+    return result.stdout;
   }
 
   override async close(): Promise<void> {

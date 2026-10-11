@@ -1,7 +1,7 @@
 import { strictEqual, deepStrictEqual } from 'node:assert';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { DockerMcpStdioTransport } from '../dist/calibration/docker-transport.js';
 import { startSupabaseCalibrationApi } from '../dist/calibration/supabase-auth.js';
@@ -49,7 +49,8 @@ try {
     strictEqual(inspected.HostConfig.NetworkMode, 'none');
     strictEqual(inspected.HostConfig.ReadonlyRootfs, true);
     deepStrictEqual(inspected.HostConfig.CapDrop, ['ALL']);
-    strictEqual(inspected.Mounts.filter(m => m.Type === 'bind').length, 1);
+    strictEqual(inspected.Mounts.filter(m => m.Type === 'bind').length, 4);
+    strictEqual(inspected.Mounts.find(m => m.Destination === '/workspace').RW, false);
     const idleSample = JSON.parse((await exec('docker', ['stats', '--no-stream', '--format',
       '{"memory":"{{.MemUsage}}","cpu":"{{.CPUPerc}}"}', transport.containerName])).stdout);
     reports.push({ suffix, ...report, network: 'none', readonlyRoot: true, privateBindOnly: true, startupMs, idleSample });
@@ -61,11 +62,11 @@ try {
   const restarted = new DockerMcpStdioTransport(b);
   transports.push(restarted);
   await restarted.schema('provider-b-sentinel', 10000);
-  strictEqual(readFileSync(join(b.root, 'private-b.txt'), 'utf8'), 'own-write-ok');
+  strictEqual(readFileSync(join(b.root, 'corpus/private-b.txt'), 'utf8'), 'own-write-ok');
   await restarted.close();
   await transports[0].close();
   const api = await startSupabaseCalibrationApi({
-    idleTimeoutMs: 1000,
+    idleTimeoutMs: 5000,
     supabase: hosted?.supabase ?? { url: 'https://isolation-test.supabase.co', publishableKey: 'sb_publishable_offline_fixture',
       fetch: async (url, request) => {
         const suffix = request.headers.authorization === 'Bearer fixture-a' ? 'a' : 'b';
@@ -106,9 +107,42 @@ try {
         headers: { authorization: `Bearer ${token(other)}` } });
       strictEqual(denied.status, 404);
       strictEqual(Object.keys(JSON.parse(readFileSync((suffix === 'a' ? a : b).wpmPath, 'utf8'))).length, 0);
+      const own = suffix === 'a' ? a : b;
+      const foreign = suffix === 'a' ? b : a;
+      writeFileSync(own.wpmPath, JSON.stringify({ LargeOwnCorpus: { observed_runs: [], padding: 'x'.repeat(2 * 1024 * 1024) } }));
+      strictEqual((await call('bootstrap')).observationSummary.voices[0].voiceRef, 'LargeOwnCorpus');
+      writeFileSync(own.wpmPath, '{}');
+      await call('bootstrap');
+      const ids = (await exec('docker', ['ps', '-q'])).stdout.trim().split(/\s+/).filter(Boolean);
+      const containers = ids.length ? JSON.parse((await exec('docker', ['inspect', ...ids])).stdout) : [];
+      const container = containers.find(item => item.Config.Env.includes(`VOICE_CALIBRATION_WORKSPACE_ID=${workspaceId(suffix)}`));
+      strictEqual(Boolean(container), true);
+      writeFileSync(foreign.wpmPath, JSON.stringify({ ForeignSentinel: { observed_runs: [] } }));
+      try {
+        // The engine creates an absolute HOST-path link, absent in its mount namespace.
+        await exec('docker', ['exec', container.Id, '/opt/venv/bin/python', '-I', '-c',
+          'import os,sys; os.unlink("/workspace/corpus/wpm.json"); os.symlink(sys.argv[1], "/workspace/corpus/wpm.json")', foreign.wpmPath]);
+        const attacked = await call('bootstrap');
+        deepStrictEqual(attacked.observationSummary, { voices: [], sourceAvailable: false });
+      } finally {
+        unlinkSync(own.wpmPath); writeFileSync(own.wpmPath, '{}'); writeFileSync(foreign.wpmPath, '{}');
+      }
+      // The writable mount point and the host UI cannot be replaced by this engine.
+      await exec('docker', ['exec', container.Id, '/opt/venv/bin/python', '-I', '-c',
+        'import os\nfor p in ["/workspace/corpus", "/workspace/ui"]:\n try: os.rename(p,p+"-attack")\n except OSError: pass\n else: raise AssertionError("Protected ancestor renamed")']);
+      writeFileSync(foreign.wpmPath, JSON.stringify({ ForeignSentinel: { observed_runs: [] } }));
+      const race = exec('docker', ['exec', container.Id, '/opt/venv/bin/python', '-I', '-c',
+        'import os,sys,time\np="/workspace/corpus/wpm.json"\nfor i in range(50):\n os.unlink(p); os.symlink(sys.argv[1],p); time.sleep(.01); os.unlink(p); open(p,"w").write("{}"); time.sleep(.01)',
+        foreign.wpmPath]);
+      try {
+        for (let i = 0; i < 5; i++) {
+          const summary = (await call('bootstrap')).observationSummary;
+          strictEqual(summary.voices.some(voice => voice.voiceRef === 'ForeignSentinel'), false);
+        }
+      } finally { await race; writeFileSync(foreign.wpmPath, '{}'); }
       for (let cycle = 0; cycle < 2; cycle++) {
         // Allow the actual container to stop, then wake through the same API handle.
-        await new Promise(resolve => setTimeout(resolve, 1800));
+        await new Promise(resolve => setTimeout(resolve, 5500));
         const responses = await Promise.all([call('bootstrap'), call('bootstrap')]);
         deepStrictEqual(responses.map(response => response.identity.tenantId), [tenantId(suffix), tenantId(suffix)]);
         strictEqual((await call(`calibration-runs/${run.id}`)).id, run.id);
@@ -118,7 +152,7 @@ try {
     }
   } finally { await api.close(); }
   const report = { status: 'PASS', reports, crashIsolation: 'PASS', restartPersistence: 'PASS',
-    apiDockerDryRun: 'PASS', apiIdleWakeCyclesPerWorkspace: 2, crossRunReads: '404 both directions', approval: 'none',
+    apiDockerDryRun: 'PASS', hostCorpusSymlinkIsolation: 'PASS', apiIdleWakeCyclesPerWorkspace: 2, crossRunReads: '404 both directions', approval: 'none',
     authentication: hosted ? 'real hosted Supabase' : 'simulated Supabase', paidCalls: 0, image };
   writeFileSync(join(root, 'report.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify({ status: 'PASS', evidence: join(root, 'report.json'), paidCalls: 0 }));

@@ -10,9 +10,9 @@ suffix = sys.argv[1]
 assert suffix in ('a', 'b')
 other = 'b' if suffix == 'a' else 'a'
 root = Path('/workspace')
-own = root / f'private-{suffix}.txt'
+own = root / 'corpus' / f'private-{suffix}.txt'
 own.write_text('own-write-ok')
-link = root / 'foreign-link'
+link = root / 'corpus' / 'foreign-link'
 link.symlink_to(root / '..' / other / f'private-{other}.txt')
 try:
     link.read_text()
@@ -26,6 +26,12 @@ except OSError as error:
     assert error.errno in (errno.EROFS, errno.EACCES)
 else:
     raise AssertionError('Rootfs write unexpectedly allowed')
+try:
+    (root / 'ui' / 'host-data-attack').write_text('forbidden')
+except OSError as error:
+    assert error.errno in (errno.EROFS, errno.EACCES)
+else:
+    raise AssertionError('Host UI write unexpectedly allowed')
 with socket.socket() as connection:
     connection.settimeout(0.2)
     assert connection.connect_ex(('198.51.100.1', 443)) != 0

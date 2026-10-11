@@ -31,6 +31,23 @@ const resolvedRequest = {
   postproc: "cut",
 };
 
+test("isolated canonical reads never fall back to the host WPM path", async () => {
+  const data = { OwnVoice: { profile: { voice_id: "own" }, wpm_calibrated: 180, observed_runs: [] } };
+  let unavailable = false;
+  const canonical = createCanonicalProfilePort({ wpmPath: "/host/path/must/not/be/read.json",
+    readCorpus: async () => {
+      if (unavailable) throw new Error("isolated path unavailable");
+      return JSON.stringify(data);
+    } });
+  strictEqual((await canonical.getObservationSummary()).voices[0].voiceRef, "OwnVoice");
+  strictEqual((await canonical.findPublished({ voiceRef: "OwnVoice" })).wpm, 180);
+  await canonical.ensurePublished({ voiceRef: "OwnVoice", wpm: 180 });
+  unavailable = true;
+  deepStrictEqual(await canonical.getObservationSummary(), { voices: [], sourceAvailable: false });
+  await rejects(canonical.findPublished({ voiceRef: "OwnVoice" }), /isolated path unavailable/);
+  await rejects(canonical.ensurePublished({ voiceRef: "OwnVoice", wpm: 180 }), /isolated path unavailable/);
+});
+
 test("stdio shutdown waits for actual exit even when a child ignores stdin closure", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "calibration-close-"));
   const childPath = join(root, "child.mjs");

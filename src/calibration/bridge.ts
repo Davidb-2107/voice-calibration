@@ -838,31 +838,36 @@ export function createCanonicalProfilePort(
     wpmPath?: string;
     language?: "fr" | "en";
     referenceBase?: string;
+    readCorpus?: () => Promise<string>;
   } = {},
 ): CanonicalProfilePort {
   const wpmPath = Object.hasOwn(options, "wpmPath") ? options.wpmPath : process.env.VOICE_WPM_PATH;
   const referenceBase = options.referenceBase ?? (wpmPath ? pathToFileURL(wpmPath).href : undefined);
+  const readCorpus = options.readCorpus ?? (() => readFile(wpmPath!, "utf8"));
   return {
     async getObservationSummary() {
-      return readObservationSummary(wpmPath);
+      return readObservationSummary(wpmPath, readCorpus);
     },
     async findPublished(input) {
-      return readPublishedWpm(input, wpmPath, options.language ?? "fr", referenceBase);
+      return readPublishedWpm(input, wpmPath, options.language ?? "fr", referenceBase, readCorpus);
     },
     async ensurePublished(input) {
       const result = options.verify
         ? await options.verify(input)
-        : await verifyWpmFile(input, wpmPath, options.language ?? "fr", referenceBase);
+        : await verifyWpmFile(input, wpmPath, options.language ?? "fr", referenceBase, readCorpus);
       if (Math.abs(result.wpm - input.wpm) > 0.001) throw new Error("canonical_wpm_mismatch");
       return { canonicalRef: result.canonicalRef };
     },
   };
 }
 
-async function readObservationSummary(wpmPath?: string): Promise<ObservationSummary> {
+async function readObservationSummary(
+  wpmPath: string | undefined,
+  readCorpus: () => Promise<string>,
+): Promise<ObservationSummary> {
   if (!wpmPath) return { voices: [], sourceAvailable: false };
   try {
-    const data = JSON.parse(await readFile(wpmPath, "utf8")) as Record<string, unknown>;
+    const data = JSON.parse(await readCorpus()) as Record<string, unknown>;
     const voices = Object.entries(data)
       .filter(
         ([voiceRef, value]) =>
@@ -908,8 +913,9 @@ async function verifyWpmFile(
   wpmPath: string | undefined,
   language: "fr" | "en",
   referenceBase?: string,
+  readCorpus?: () => Promise<string>,
 ): Promise<{ canonicalRef: string; wpm: number }> {
-  const published = await readPublishedWpm(input, wpmPath, language, referenceBase);
+  const published = await readPublishedWpm(input, wpmPath, language, referenceBase, readCorpus);
   if (!published) throw new Error("canonical_wpm_unavailable");
   return published;
 }
@@ -919,10 +925,14 @@ async function readPublishedWpm(
   wpmPath: string | undefined,
   language: "fr" | "en",
   referenceBase?: string,
+  readCorpus?: () => Promise<string>,
 ): Promise<{ canonicalRef: string; wpm: number } | null> {
   if (!wpmPath) throw new Error("canonical_wpm_unavailable");
   language = input.language ?? language;
-  const data = JSON.parse(await readFile(wpmPath, "utf8")) as Record<string, Record<string, unknown>>;
+  const data = JSON.parse(await (readCorpus ? readCorpus() : readFile(wpmPath, "utf8"))) as Record<
+    string,
+    Record<string, unknown>
+  >;
   const record = data[input.voiceRef];
   if (!record || typeof record !== "object") return null;
   const profile =
