@@ -54,6 +54,11 @@ keeps ownership until EngineManager confirms every engine shutdown; failed shutd
 retains the owner lock. Standalone supervisors use `queue.close(() => engines.close())`.
 There is no automatic retry loop.
 
+API shutdown suspends admission and dispatch before waiting for HTTP responses,
+including synchronous `/execute` requests waiting in the queue. Already active
+attempts drain; waiting requests receive the reauthentication refusal. Calls to
+close share the same shutdown, and engine failure retains the owner lock.
+
 One supervised API process owns `owner.lock`. A second process refuses startup.
 After a crash, an operator must confirm that the owner **and its Python children**
 have terminated before removing this queue's stale owner/store locks and restarting.

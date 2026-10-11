@@ -26,6 +26,38 @@ async function fixture(t, limit = 4) {
   return { root, queue };
 }
 
+test("HTTP shutdown suspends waiting execute jobs before draining responses", async (t) => {
+  const { queue } = await fixture(t, 1);
+  const hold = deferred();
+  const executions = [];
+  const app = { getSessionNonce: () => "nonce", getRun: async (_ws, id) => run(Number(id.split("-")[1])),
+    execute: async (_ws, id) => {
+      executions.push(id);
+      if (id === "run-0") await hold.promise;
+      return { ...run(Number(id.split("-")[1])), status: "succeeded" };
+    } };
+  await queue.enqueue(identity(0), run(0), async () => app);
+  await until(() => executions.length === 1);
+  const ui = await startCalibrationUi({ jobQueue: queue, closeApplications: () => queue.close(),
+    resolveApplication: async () => ({ application: app, workspaceId: identity(1).workspaceId,
+      identity: { userId: identity(1).userId, tenantId: identity(1).tenantId } }) });
+  try {
+    const waiting = fetch(`${ui.url}/api/v1/calibration-runs/run-1/execute`, { method: "POST",
+      headers: { "x-calibration-nonce": "nonce", "content-type": "application/json" }, body: "{}" });
+    await until(async () => (await queue.get(identity(1), "run-1"))?.status === "queued");
+    const closing = ui.close();
+    const again = ui.close();
+    hold.resolve();
+    const response = await waiting;
+    await response.text();
+    await Promise.all([closing, again]);
+    deepStrictEqual(executions, ["run-0"]);
+    strictEqual((await queue.get(identity(1), "run-1")).status, "awaiting_authentication");
+    strictEqual(response.status, 403);
+    await rejects(queue.enqueue(identity(2), run(2), async () => app), /Queue is closed/);
+  } finally { hold.resolve(); await ui.close(); }
+});
+
 test("100 independent workspaces obey the execution limit, FIFO, and duplicate admission", async (t) => {
   const { root, queue } = await fixture(t);
   let active = 0, peak = 0;

@@ -484,13 +484,27 @@ export async function startCalibrationUi(options: CalibrationHttpServerOptions):
     throw new Error("unable to determine calibration UI address");
   }
   const url = `http://${urlHost(host)}:${address.port}`;
+  let closing: Promise<void> | undefined;
   return {
     server,
     url,
     async close() {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-      if (options.resolveApplication) await options.closeApplications();
-      else await options.application.close();
+      closing ??= (async () => {
+        const httpClosed = new Promise<void>((resolve) => server.close(() => resolve()));
+        const applicationsClosed = (async () => {
+          if (!options.jobQueue) await httpClosed;
+          if (options.resolveApplication) await options.closeApplications();
+          else await options.application.close();
+        })();
+        const results = await Promise.allSettled([httpClosed, applicationsClosed]);
+        const errors = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+        if (errors.length)
+          throw new AggregateError(
+            errors.map((result) => result.reason),
+            "API shutdown failed",
+          );
+      })();
+      return closing;
     },
   };
 }

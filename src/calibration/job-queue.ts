@@ -197,6 +197,7 @@ export class CalibrationJobQueue {
       engine = await authorize();
       const current = await engine.getRun(job.workspaceId, job.runId);
       if (
+        this.closed ||
         !current ||
         current.requestDigest !== job.requestDigest ||
         (current.configurationIdentity ?? null) !== job.configurationIdentity
@@ -209,6 +210,11 @@ export class CalibrationJobQueue {
     }
     job.status = "running";
     await this.save(job);
+    if (this.closed) {
+      job.status = "awaiting_authentication";
+      await this.save(job);
+      return;
+    }
     try {
       const result = await engine.execute(job.workspaceId, job.runId);
       job.status = result.status === "execution_unknown" ? "execution_unknown" : "finished";
