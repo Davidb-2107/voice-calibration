@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-
+import { bootstrapRedactor, bootstrapStage } from "./bootstrap-diagnostics.js";
 import type {
   CalibrationBridge,
   CanonicalProfilePort,
@@ -477,13 +477,14 @@ export class CalibrationApplication {
 
   async getBootstrap(workspaceId = DEFAULT_WORKSPACE): Promise<BootstrapView> {
     assertWorkspaceId(workspaceId);
-    await this.ensureRecovered(workspaceId);
+    bootstrapRedactor(this.credentials?.redact);
+    await bootstrapStage("run_recovery", () => this.ensureRecovered(workspaceId));
     const [config, activeCorpus, profiles, recentRuns, observationSummary] = await Promise.all([
-      this.credentials ? this.credentials.status() : Promise.resolve({ configured: true }),
-      this.repositories.corpus.getActiveVersion(workspaceId),
-      this.repositories.profiles.list(workspaceId),
-      this.repositories.runs.list(workspaceId),
-      this.canonical.getObservationSummary?.(),
+      bootstrapStage("configuration", () => (this.credentials ? this.credentials.status() : { configured: true })),
+      bootstrapStage("corpus", () => this.repositories.corpus.getActiveVersion(workspaceId)),
+      bootstrapStage("profiles", () => this.repositories.profiles.list(workspaceId)),
+      bootstrapStage("runs", () => this.repositories.runs.list(workspaceId)),
+      bootstrapStage("observations", () => this.canonical.getObservationSummary?.()),
     ]);
     return {
       sessionNonce: this.sessionNonce,

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { type CalibrationApplication, createCalibrationApplication } from "./application.js";
+import { bootstrapSecret, bootstrapStage } from "./bootstrap-diagnostics.js";
 import { type CalibrationTransport, createCalibrationBridge, createCanonicalProfilePort } from "./bridge.js";
 import {
   type CredentialOptions,
@@ -79,7 +80,8 @@ export async function createVoiceCalibrationApplication(
       const file = suppliedCredentials.envFile;
       if (typeof file !== "string" || !file.trim()) throw new Error("Invalid credential file path");
       try {
-        secret = parseDotEnv(readFileSync(resolve(cwd, file), "utf8")).ELEVENLABS_API_KEY;
+        secret = (await bootstrapStage("credentials", () => parseDotEnv(readFileSync(resolve(cwd, file), "utf8"))))
+          .ELEVENLABS_API_KEY;
       } catch {
         throw new Error("Credential file is unavailable");
       }
@@ -94,6 +96,7 @@ export async function createVoiceCalibrationApplication(
     }
   }
 
+  bootstrapSecret(secret);
   let wpmPath: string | undefined;
   const isolatedTransport = options.mcpTransport instanceof DockerMcpStdioTransport ? options.mcpTransport : undefined;
   const readCorpus = isolatedTransport ? () => isolatedTransport.readCorpus(secret!) : undefined;
@@ -101,10 +104,13 @@ export async function createVoiceCalibrationApplication(
   const historicalWpmPath = vault ? resolve(vault, "Shared", "voice-calibration", "voice_wpm.json") : undefined;
   if (suppliedWpmPath !== undefined) {
     if (typeof suppliedWpmPath !== "string" || !suppliedWpmPath.trim()) throw new Error("Invalid WPM path");
-    wpmPath = resolve(cwd, suppliedWpmPath);
+    const sourcePath = resolve(cwd, suppliedWpmPath);
+    wpmPath = sourcePath;
     let corpus: unknown;
     try {
-      corpus = JSON.parse(readCorpus ? await readCorpus() : readFileSync(wpmPath, "utf8"));
+      corpus = await bootstrapStage("corpus_read", async () =>
+        JSON.parse(readCorpus ? await readCorpus() : readFileSync(sourcePath, "utf8")),
+      );
     } catch {
       await isolatedTransport?.close();
       throw new Error("WPM file is unavailable or invalid");
@@ -161,7 +167,7 @@ export async function createVoiceCalibrationApplication(
       else void application.close();
     });
   try {
-    if (boundInstance) await bridge.getSchema();
+    if (boundInstance) await bootstrapStage("mcp_handshake", () => bridge.getSchema());
     if (exited) throw new Error("MCP process exited; restart the calibration instance");
     return application;
   } catch (error) {

@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { fileURLToPath } from "node:url";
 
 import { ContractValidationError, NotFoundError, UnavailableError } from "./application.js";
+import { bootstrapFailure, bootstrapRequest, bootstrapStage } from "./bootstrap-diagnostics.js";
 import { assertWorkspaceId, InvalidWorkspaceIdError } from "./domain.js";
 import type { CalibrationEngine } from "./engine-manager.js";
 import type { CalibrationJobQueue } from "./job-queue.js";
@@ -223,7 +224,7 @@ async function dispatch(
     if (options.resolveApplication && !url.pathname.startsWith("/api/v1/"))
       throw new HttpError(404, "not_found", "API route not found");
     if (method === "GET" && url.pathname === "/api/v1/bootstrap") {
-      const bootstrap = await application.getBootstrap(workspaceId);
+      const bootstrap = await bootstrapStage("bootstrap", () => application.getBootstrap(workspaceId));
       sendJson(response, 200, selected.identity ? { ...bootstrap, identity: selected.identity } : bootstrap);
       return;
     }
@@ -430,6 +431,7 @@ async function dispatch(
     }
     throw new HttpError(404, "not_found", "route not found");
   } catch (error) {
+    bootstrapFailure("request", error);
     const status = statusForError(error);
     sendJson(response, status, { error: errorPayload(error) });
   }
@@ -446,7 +448,12 @@ export function createCalibrationServer(options: CalibrationHttpServerOptions): 
   assertWorkspaceId(workspaceId);
   const fixedOptions = { ...options, workspaceId };
   return createServer((request, response) => {
-    void dispatch(request, response, fixedOptions);
+    if (request.method === "GET" && request.url?.split("?")[0] === "/api/v1/bootstrap") {
+      void bootstrapRequest(request.headers.authorization, (id) => {
+        response.setHeader("x-correlation-id", id);
+        return dispatch(request, response, fixedOptions);
+      });
+    } else void dispatch(request, response, fixedOptions);
   });
 }
 

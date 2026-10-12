@@ -4,6 +4,7 @@ import { constants } from "node:fs";
 import { mkdir, open } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { promisify } from "node:util";
+import { bootstrapStage } from "./bootstrap-diagnostics.js";
 import { NodeMcpStdioTransport } from "./bridge.js";
 import { assertWorkspaceId } from "./domain.js";
 import { assertNoSymlinkWithin, canonicalLocalPath } from "./local-store.js";
@@ -160,7 +161,7 @@ export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
       await lock.close();
     })();
     await this.prepared;
-    return super.schema(secret, timeoutMs);
+    return bootstrapStage("mcp_handshake", () => super.schema(secret, timeoutMs));
   }
 
   async readCorpus(secret: string): Promise<string> {

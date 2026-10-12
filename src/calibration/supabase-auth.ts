@@ -1,5 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
+import { bootstrapSecret, bootstrapStage } from "./bootstrap-diagnostics.js";
 import { DockerMcpStdioTransport } from "./docker-transport.js";
 import { assertWorkspaceId } from "./domain.js";
 import { type CalibrationEngine, EngineManager, type EngineManagerOptions } from "./engine-manager.js";
@@ -115,14 +116,19 @@ export function createSupabaseWorkspaceResolver(
   }
   async function get(path: string, token: string): Promise<unknown> {
     try {
-      const response = await requestFetch(new URL(path, url), {
-        headers: { apikey: publicKey, authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(5_000),
-        redirect: "error",
-      });
+      const response = await bootstrapStage(path.startsWith("/auth/") ? "authentication" : "membership", () =>
+        requestFetch(new URL(path, url), {
+          headers: { apikey: publicKey, authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(5_000),
+          redirect: "error",
+        }),
+      );
       if (response.status === 401 || response.status === 403)
         throw new HttpError(401, "unauthenticated", "Supabase authentication required");
-      if (!response.ok) throw new HttpError(503, "auth_unavailable", "Supabase authorization unavailable");
+      if (!response.ok)
+        throw Object.assign(new HttpError(503, "auth_unavailable", "Supabase authorization unavailable"), {
+          cause: new Error(`Supabase returned HTTP ${response.status}`),
+        });
       return await response.json();
     } catch (error) {
       if (error instanceof HttpError) throw error;
@@ -134,7 +140,8 @@ export function createSupabaseWorkspaceResolver(
     const match = typeof authorization === "string" && /^Bearer ([^\s,]+)$/iu.exec(authorization);
     if (!match) throw new HttpError(401, "unauthenticated", "Bearer session required");
     const token = match[1];
-    const user = await get("/auth/v1/user", token);
+    bootstrapSecret(publicKey);
+    const user = await bootstrapStage("authentication", () => get("/auth/v1/user", token));
     if (
       !record(user) ||
       typeof user.id !== "string" ||
@@ -146,7 +153,9 @@ export function createSupabaseWorkspaceResolver(
     )
       throw new HttpError(401, "unauthenticated", "Confirmed non-anonymous account required");
     // No cache: revoking the DB membership takes effect on the next request, even with a valid JWT.
-    const rows = await get("/rest/v1/calibration_workspaces?select=id,tenant_id&limit=2", token);
+    const rows = await bootstrapStage("membership", () =>
+      get("/rest/v1/calibration_workspaces?select=id,tenant_id&limit=2", token),
+    );
     if (
       !Array.isArray(rows) ||
       rows.length !== 1 ||
@@ -159,7 +168,9 @@ export function createSupabaseWorkspaceResolver(
     if (!selected || selected.tenantId !== rows[0].tenant_id)
       throw new HttpError(403, "workspace_forbidden", "Workspace is not provisioned for this tenant");
     const application =
-      typeof selected.application === "function" ? await selected.application() : selected.application;
+      typeof selected.application === "function"
+        ? await bootstrapStage("engine_start", selected.application.bind(selected))
+        : selected.application;
     return { application, workspaceId: rows[0].id, identity: { userId: user.id, tenantId: selected.tenantId } };
   };
 }
