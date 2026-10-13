@@ -8,6 +8,7 @@ import { type CalibrationUiOptions, createVoiceCalibrationApplication } from "./
 import { type CalibrationUiHandle, HttpError, isLoopbackHost, startCalibrationUi } from "./http-server.js";
 import { CalibrationJobQueue } from "./job-queue.js";
 import { canonicalLocalPath } from "./local-store.js";
+import { initializeStandardCorpus } from "./standard-corpus.js";
 
 export interface SupabaseAuthOptions {
   url: string;
@@ -253,14 +254,24 @@ export async function startSupabaseCalibrationApi(
   const engines = new EngineManager(
     fixed.map((workspace) => ({
       workspaceId: workspace.workspaceId,
-      create: () =>
-        createVoiceCalibrationApplication({
+      create: async () => {
+        const application = await createVoiceCalibrationApplication({
           ...workspace,
           mcpTransport:
             workspace.mcpTransport instanceof DockerMcpStdioTransport
               ? new DockerMcpStdioTransport(workspace.mcpTransport.binding)
               : workspace.mcpTransport,
-        }),
+        });
+        try {
+          // Verify the engine binding before provisioning this authorized workspace's UI corpus.
+          await application.getBootstrap(workspace.workspaceId);
+          await initializeStandardCorpus(workspace.dataDir, workspace.workspaceId);
+          return application;
+        } catch (error) {
+          await application.close();
+          throw error;
+        }
+      },
     })),
     {
       maxConcurrentStarts: options.maxConcurrentStarts,
