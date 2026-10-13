@@ -299,6 +299,15 @@ function makeRunRepository(dataDir: string, lockTimeoutMs: number): CalibrationR
   const pathFor = (workspaceId: string, id: string) =>
     join(workspaceRoot(dataDir, workspaceId), "runs", `${safeSegment(id, "runId")}.json`);
   return {
+    async withVoiceLock(workspaceId, voiceRef, work) {
+      assertWorkspaceId(workspaceId);
+      const voiceKey = createHash("sha256").update(voiceRef).digest("hex");
+      return withFileLock(
+        join(workspaceRoot(dataDir, workspaceId), "runs", `${voiceKey}.preparation`),
+        work,
+        lockTimeoutMs,
+      );
+    },
     async create(run) {
       assertWorkspaceId(run.workspaceId);
       const path = pathFor(run.workspaceId, run.id);
@@ -368,7 +377,7 @@ function makeRunRepository(dataDir: string, lockTimeoutMs: number): CalibrationR
   };
 }
 
-function makeProfileRepository(dataDir: string): VoiceProfileRepository {
+function makeProfileRepository(dataDir: string, lockTimeoutMs: number): VoiceProfileRepository {
   const rootFor = (workspaceId: string) => join(workspaceRoot(dataDir, workspaceId), "profiles");
   return {
     async list(workspaceId) {
@@ -379,7 +388,20 @@ function makeProfileRepository(dataDir: string): VoiceProfileRepository {
     },
     async publish(profile) {
       assertWorkspaceId(profile.workspaceId);
-      await writeJson(join(rootFor(profile.workspaceId), `${safeSegment(profile.id, "profileId")}.json`), profile);
+      const root = rootFor(profile.workspaceId);
+      const lockPath = join(root, `${safeSegment(profile.sourceRunId, "runId")}.publication`);
+      return withFileLock(
+        lockPath,
+        async () => {
+          const existing = (await this.list(profile.workspaceId)).find(
+            (published) => published.sourceRunId === profile.sourceRunId,
+          );
+          if (existing) return existing;
+          await writeJson(join(root, `${safeSegment(profile.id, "profileId")}.json`), profile);
+          return profile;
+        },
+        lockTimeoutMs,
+      );
     },
   };
 }
@@ -437,7 +459,7 @@ export function createLocalStore(dataDir = DEFAULT_DATA_DIR, options: LocalStore
   return {
     corpus: makeCorpusRepository(resolvedDataDir, lockTimeoutMs),
     runs: makeRunRepository(resolvedDataDir, lockTimeoutMs),
-    profiles: makeProfileRepository(resolvedDataDir),
+    profiles: makeProfileRepository(resolvedDataDir, lockTimeoutMs),
     artifacts: makeArtifactStore(resolvedDataDir),
   };
 }

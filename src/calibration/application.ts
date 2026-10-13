@@ -540,6 +540,14 @@ export class CalibrationApplication {
 
   async prepareDryRun(input: CalibrationInput): Promise<CalibrationRun> {
     assertWorkspaceId(input.workspaceId);
+    const prepare = () => this.prepareDryRunLocked(input);
+    return this.repositories.runs.withVoiceLock
+      ? this.repositories.runs.withVoiceLock(input.workspaceId, input.voiceRef, prepare)
+      : this.withRunLock(input.workspaceId, `prepare:${input.voiceRef}`, prepare);
+  }
+
+  private async prepareDryRunLocked(input: CalibrationInput): Promise<CalibrationRun> {
+    assertWorkspaceId(input.workspaceId);
     if (!this.configurationIdentity) throw new UnavailableError("configuration identity is unavailable");
     await this.ensureRecovered(input.workspaceId);
     await this.assertConfigured();
@@ -825,6 +833,10 @@ export class CalibrationApplication {
       if (run.status !== "succeeded") throw new ConflictError("profile publication requires a successful run");
       if (run.request.postproc !== "cut")
         throw new ContractValidationError('profile publication requires postproc="cut" for the canonical WPM source');
+      const existing = (await this.repositories.profiles.list(workspaceId)).find(
+        (profile) => profile.sourceRunId === runId,
+      );
+      if (existing) return existing;
       const report = await this.loadReport(run);
       const wpm = wpmFromReport(report);
       if (wpm === null) throw new ContractValidationError("successful calibration result has no WPM");
@@ -856,7 +868,7 @@ export class CalibrationApplication {
         throw new ContractValidationError(message);
       }
       const profile: VoiceProfile = {
-        id: randomUUID(),
+        id: run.id,
         workspaceId: run.workspaceId,
         voiceRef: run.request.voiceRef,
         wpmSnapshot: publishedWpm,
@@ -867,8 +879,7 @@ export class CalibrationApplication {
         reportId: run.reportId as string,
         publishedAt: nowIso(this.clock),
       };
-      await this.repositories.profiles.publish(profile);
-      return profile;
+      return (await this.repositories.profiles.publish(profile)) ?? profile;
     });
   }
 

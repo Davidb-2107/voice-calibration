@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import { deepStrictEqual, strictEqual, match } from "node:assert";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -115,7 +115,16 @@ test(`local calibration MVP completes in ${workspaceId}`, async (t) => {
 
   const profileResponse = await fetch(`${ui.url}/api/v1/voice-profiles`, { method: "POST", headers: nonceHeaders, body: JSON.stringify({ runId: run.id }) });
   strictEqual(profileResponse.status, 201);
-  strictEqual((await body(profileResponse)).canonicalRef, "Shared/voice-calibration/voice_wpm.json#voice-1.wpm_calibrated");
+  const publishedProfile = await body(profileResponse);
+  strictEqual(publishedProfile.canonicalRef, "Shared/voice-calibration/voice_wpm.json#voice-1.wpm_calibrated");
+  const repeatedProfiles = await Promise.all([1, 2].map(async () => {
+    const response = await fetch(`${ui.url}/api/v1/voice-profiles`, {
+      method: "POST", headers: nonceHeaders, body: JSON.stringify({ runId: run.id }),
+    });
+    strictEqual(response.status, 201);
+    return body(response);
+  }));
+  for (const profile of repeatedProfiles) deepStrictEqual(profile, publishedProfile);
   strictEqual(canonical.calls.length, 1);
   strictEqual((await body(await fetch(`${ui.url}/api/v1/voice-profiles`))).length, 1);
 
@@ -140,6 +149,70 @@ test(`local calibration MVP completes in ${workspaceId}`, async (t) => {
   strictEqual(lostResponse.status, 200);
   strictEqual((await body(lostResponse)).status, "execution_unknown");
   strictEqual(bridge.state.executions.length, originalExecutionCount + 1);
+});
+
+if (workspaceId === "local-default") test("concurrent preparation creates only one active proposal for the same voice", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "calibration-prepare-retry-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const bridge = fakeBridge();
+  const start = () => createCalibrationApplication({
+    repositories: createLocalStore(root), bridge, canonical: fakeCanonical(), configurationIdentity: TEST_IDENTITY,
+  });
+  const first = start();
+  const second = start();
+  t.after(async () => { await first.close(); await second.close(); });
+  const { draft } = await first.getDraft(workspaceId);
+  const saved = await first.saveDraft(workspaceId, {
+    ...draft, items: [{ id: "one", order: 0, text: "Bonjour." }],
+  }, draft.revision);
+  await first.publishCorpusVersion(workspaceId, saved.revision);
+  const input = { workspaceId, voiceRef: "voice-prepare-retry", postproc: "cut",
+    params: { model_id: "eleven_v3", voice_settings: { stability: 0.5, similarity_boost: 0.85 },
+      mode: "precision", language: "fr", runs: 3 } };
+  const outcomes = await Promise.allSettled([first.prepareDryRun(input), second.prepareDryRun(input)]);
+  strictEqual(outcomes.filter((outcome) => outcome.status === "fulfilled").length, 1);
+  strictEqual(outcomes.filter((outcome) => outcome.status === "rejected").length, 1);
+  strictEqual(bridge.state.dryRuns.length, 1);
+  strictEqual(readdirSync(join(root, "workspaces", workspaceId, "runs")).filter((name) => name.endsWith(".json")).length, 1);
+});
+
+if (workspaceId === "local-default") test("profile publication remains unique across independent stores and application restarts", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "calibration-profile-retry-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const workspaceId = "workspace-profile-retry";
+  const bridge = fakeBridge();
+  const canonical = fakeCanonical();
+  const start = () => createCalibrationApplication({
+    repositories: createLocalStore(root), bridge, canonical, configurationIdentity: TEST_IDENTITY,
+  });
+  const first = start();
+  const { draft } = await first.getDraft(workspaceId);
+  const saved = await first.saveDraft(workspaceId, {
+    ...draft, items: [{ id: "one", order: 0, text: "Bonjour." }],
+  }, draft.revision);
+  await first.publishCorpusVersion(workspaceId, saved.revision);
+  const run = await first.prepareDryRun({
+    workspaceId, voiceRef: "voice-retry", postproc: "cut",
+    params: { model_id: "eleven_v3", voice_settings: { stability: 0.5, similarity_boost: 0.85 },
+      mode: "precision", language: "fr", runs: 3 },
+  });
+  await first.approve(workspaceId, run.id, { requestDigest: run.requestDigest });
+  await first.execute(workspaceId, run.id);
+  const second = start();
+  const profiles = await Promise.all([
+    first.publishProfile(workspaceId, run.id), second.publishProfile(workspaceId, run.id),
+  ]);
+  deepStrictEqual(profiles[0], profiles[1]);
+  deepStrictEqual(await first.listVoiceProfiles(workspaceId), [profiles[0]]);
+  await first.close();
+  await second.close();
+  const restarted = start();
+  const publicationCount = canonical.calls.length;
+  deepStrictEqual(await restarted.publishProfile(workspaceId, run.id), profiles[0]);
+  deepStrictEqual(await restarted.listVoiceProfiles(workspaceId), [profiles[0]]);
+  strictEqual(canonical.calls.length, publicationCount);
+  strictEqual(bridge.state.executions.length, 1);
+  await restarted.close();
 });
 }
 

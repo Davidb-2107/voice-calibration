@@ -10,6 +10,7 @@ export interface CorpusRepository {
 }
 
 export interface CalibrationRunRepository {
+  withVoiceLock?<T>(workspaceId: string, voiceRef: string, work: () => Promise<T>): Promise<T>;
   create(run: CalibrationRun): Promise<void>;
   get(workspaceId: string, id: string): Promise<CalibrationRun | null>;
   save(run: CalibrationRun): Promise<void>;
@@ -20,7 +21,7 @@ export interface CalibrationRunRepository {
 
 export interface VoiceProfileRepository {
   list(workspaceId: string): Promise<VoiceProfile[]>;
-  publish(profile: VoiceProfile): Promise<void>;
+  publish(profile: VoiceProfile): Promise<VoiceProfile | void>;
 }
 
 export interface VoiceDirectoryPort {
