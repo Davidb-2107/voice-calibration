@@ -196,6 +196,44 @@ function makeCorpusRepository(dataDir: string, lockTimeoutMs: number): CorpusRep
     return (await readJson<{ versionId: string }>(path)).versionId;
   }
 
+  async function publishDraft(
+    workspaceId: string,
+    expectedRevision: number,
+    onlyIfUnpublished: boolean,
+  ): Promise<CorpusVersion | null> {
+    assertWorkspaceId(workspaceId);
+    return queueFor(corpusQueues, `${resolve(dataDir)}:${workspaceId}`, () =>
+      withFileLock(
+        draftPath(workspaceId),
+        async () => {
+          if (onlyIfUnpublished) {
+            if (await loadActiveId(workspaceId)) return null;
+            const root = versionsRoot(workspaceId);
+            if ((await exists(root)) && (await readdir(root)).some((name) => name.endsWith(".json"))) return null;
+          }
+          const draft = await loadDraft(workspaceId);
+          if (draft.revision !== expectedRevision) {
+            if (onlyIfUnpublished) return null;
+            throw new ConflictError();
+          }
+          const version: CorpusVersion = {
+            id: randomUUID(),
+            workspaceId,
+            revision: draft.revision,
+            items: draft.items.map((item) => ({ ...item })),
+            contentDigest: itemsDigest(draft.items),
+            status: "active",
+            publishedAt: new Date().toISOString(),
+          };
+          await writeJson(join(versionsRoot(workspaceId), `${version.id}.json`), version);
+          await writeJson(activePath(workspaceId), { versionId: version.id });
+          return cloneVersion(version);
+        },
+        lockTimeoutMs,
+      ),
+    );
+  }
+
   return {
     getDraft: loadDraft,
 
@@ -223,30 +261,13 @@ function makeCorpusRepository(dataDir: string, lockTimeoutMs: number): CorpusRep
     },
 
     async publishDraft(workspaceId, expectedRevision) {
-      assertWorkspaceId(workspaceId);
-      return queueFor(corpusQueues, `${resolve(dataDir)}:${workspaceId}`, () =>
-        withFileLock(
-          join(workspaceRoot(dataDir, workspaceId), "corpus", "draft.json"),
-          async () => {
-            const draft = await loadDraft(workspaceId);
-            if (draft.revision !== expectedRevision) throw new ConflictError();
-            const publishedAt = new Date().toISOString();
-            const version: CorpusVersion = {
-              id: randomUUID(),
-              workspaceId,
-              revision: draft.revision,
-              items: draft.items.map((item) => ({ ...item })),
-              contentDigest: itemsDigest(draft.items),
-              status: "active",
-              publishedAt,
-            };
-            await writeJson(join(versionsRoot(workspaceId), `${version.id}.json`), version);
-            await writeJson(activePath(workspaceId), { versionId: version.id });
-            return cloneVersion(version);
-          },
-          lockTimeoutMs,
-        ),
-      );
+      const version = await publishDraft(workspaceId, expectedRevision, false);
+      if (!version) throw new ConflictError();
+      return version;
+    },
+
+    publishDraftIfUnpublished(workspaceId, expectedRevision) {
+      return publishDraft(workspaceId, expectedRevision, true);
     },
 
     async getActiveVersion(workspaceId) {

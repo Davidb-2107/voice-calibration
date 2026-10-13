@@ -29,7 +29,7 @@ export async function initializeStandardCorpus(dataDir: string, workspaceId: str
       }
       // Resume only our first standard draft; preserve every custom or subsequently edited draft.
       if (draft.revision === 1 && JSON.stringify(draft.items) === JSON.stringify(STANDARD_ITEMS)) {
-        await store.corpus.publishDraft(workspaceId, draft.revision);
+        await store.corpus.publishDraftIfUnpublished(workspaceId, draft.revision);
       }
     },
     30_000,

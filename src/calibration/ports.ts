@@ -4,6 +4,7 @@ export interface CorpusRepository {
   getDraft(workspaceId: string): Promise<CorpusDraft>;
   saveDraft(workspaceId: string, draft: CorpusDraft, expectedRevision: number): Promise<CorpusDraft>;
   publishDraft(workspaceId: string, expectedRevision: number): Promise<CorpusVersion>;
+  publishDraftIfUnpublished(workspaceId: string, expectedRevision: number): Promise<CorpusVersion | null>;
   getActiveVersion(workspaceId: string): Promise<CorpusVersion | null>;
   listVersions(workspaceId: string): Promise<CorpusVersion[]>;
 }
