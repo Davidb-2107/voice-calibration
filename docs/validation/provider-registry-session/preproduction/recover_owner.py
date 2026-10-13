@@ -80,6 +80,10 @@ def engine_ids(config):
     return list(dict.fromkeys(owned))
 
 
+def node_store_lock(path):
+    return path.name.endswith(('.json.lock', '.preparation.lock', '.publication.lock'))
+
+
 def recover(config):
     """Caller holds the OS startup lock through recovery AND API startup."""
     if config['host'] != '127.0.0.1' or config['provider'] != 'simulated':
@@ -101,7 +105,7 @@ def recover(config):
         # Also fail closed if unowned workspace engines are still running.
         if engine_ids(config):
             raise RuntimeError('Engines present without an owner; recovery blocked')
-        if any(list(store.rglob('*.json.lock')) for store in stores):
+        if any(node_store_lock(entry) for store in stores for entry in store.rglob('*')):
             raise RuntimeError('Store locks present without an owner; recovery blocked')
         return {'recovered': False}
     original = owner.read_bytes()
@@ -114,7 +118,7 @@ def recover(config):
     for root in roots:
         for entry in root.rglob('*'):
             checked(entry)
-            if not entry.is_file() or not entry.name.endswith('.json.lock'):
+            if not entry.is_file() or not node_store_lock(entry):
                 continue
             content = entry.read_bytes()
             lock = json.loads(content)

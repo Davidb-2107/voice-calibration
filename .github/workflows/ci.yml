@@ -52,6 +52,12 @@ jobs:
       - name: Publication and release evidence checks
         run: python3 -m unittest discover -s docs/validation/provider-registry-session/preproduction -p 'test_release*.py'
 
+      - name: Install recovery regression dependencies
+        run: python3 -m pip install pytest
+
+      - name: Recovery guards for preparation and publication locks
+        run: python3 -m pytest docs/validation/provider-registry-session/preproduction/test_new_lock_recovery.py -q
+
   secrets-scan:
     name: Secrets scan
     runs-on: ubuntu-latest
