@@ -1,5 +1,7 @@
 # Sources et preuves de validation du registre fournisseur
 
+Activation d'une release locale ou ajout d'un workspace : consulter [preproduction/RELEASES.md](preproduction/RELEASES.md) et utiliser le contrat explicite `release.py`.
+
 Archive source du lot local validé le 2026-10-11. Le code API est dans `src/calibration/` de ce dépôt ; le moteur et ses tests sont dans `Shared/voice-calibration/` du dépôt Wiki_Claude. Les scripts et rapports ici proviennent du harness local utilisé pour les validations.
 
 Cette archive ne constitue pas un déploiement autonome. Les scripts conservent le contrat du harness original : dossier `preproduction/` avec configuration locale non versionnée, moteur dans `work/supabase-tenant-adapter/Shared/voice-calibration`, API compilée dans `work/supabase-calibration-auth/dist`, données et contrôles indépendants fournis par cette configuration. Les rapports et leurs liens décrivent ce contexte original. Ne pas les lancer directement depuis ce dossier d'archive.

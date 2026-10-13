@@ -22,6 +22,7 @@ export type CalibrationHttpServerOptions = {
   allowNetwork?: boolean;
   publicOrigin?: string;
   jobQueue?: CalibrationJobQueue;
+  browserAuth?: { url: string; publishableKey: string };
 } & (
   | { application: CalibrationEngine; resolveApplication?: never; closeApplications?: never }
   | {
@@ -210,6 +211,26 @@ async function dispatch(
       url = new URL(request.url ?? "/", `http://${host ?? "localhost"}`);
     } catch {
       throw new HttpError(400, "malformed_url", "Invalid request URL or Host");
+    }
+    // Only public UI assets precede authentication; business routes still resolve server-owned membership.
+    if (
+      method === "GET" &&
+      ["/", "/calibration.html", "/calibration-client.js", "/calibration-auth.js"].includes(url.pathname)
+    ) {
+      const html = url.pathname === "/" || url.pathname === "/calibration.html";
+      const body =
+        url.pathname === "/calibration-auth.js"
+          ? Buffer.from(
+              `const CALIBRATION_AUTH = ${JSON.stringify(options.browserAuth ?? null).replaceAll("<", "\\u003c")};`,
+            )
+          : await readFile(html ? CALIBRATION_HTML : CALIBRATION_CLIENT);
+      response.writeHead(200, {
+        "content-type": html ? "text/html; charset=utf-8" : "text/javascript; charset=utf-8",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+      });
+      response.end(body);
+      return;
     }
     const selected = options.resolveApplication
       ? await options.resolveApplication(request)
@@ -408,27 +429,6 @@ async function dispatch(
       return;
     }
 
-    if (url.pathname === "/" || url.pathname === "/calibration.html") {
-      let html: Buffer;
-      try {
-        html = await readFile(CALIBRATION_HTML);
-      } catch {
-        html = Buffer.from("<!doctype html><html><body><main id=app>Calibration UI</main></body></html>", "utf8");
-      }
-      response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
-      response.end(html);
-      return;
-    }
-    if (url.pathname === "/calibration-client.js") {
-      try {
-        const client = await readFile(CALIBRATION_CLIENT);
-        response.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" });
-        response.end(client);
-      } catch {
-        throw new HttpError(404, "not_found", "static path not found");
-      }
-      return;
-    }
     throw new HttpError(404, "not_found", "route not found");
   } catch (error) {
     bootstrapFailure("request", error);

@@ -305,6 +305,12 @@ test("protected entrypoint starts only authorized requested workspaces and valid
   const ui = await startSupabaseCalibrationApi({ supabase: { ...authConfig, fetch: simulatedSupabase().fetch }, workspaces });
   t.after(() => ui.close());
   deepStrictEqual(starts, { a: 0, b: 0 });
+  for (const path of ["/", "/calibration-client.js", "/calibration-auth.js"]) {
+    const asset = await fetch(`${ui.url}${path}`);
+    strictEqual(asset.status, 200);
+    doesNotMatch(await asset.text(), /fake-a|fake-b/);
+  }
+  deepStrictEqual(starts, { a: 0, b: 0 });
   strictEqual((await fetch(`${ui.url}/api/v1/bootstrap`)).status, 401);
   strictEqual((await fetch(`${ui.url}/api/v1/bootstrap`, { headers: { authorization: "Bearer invalid" } })).status, 401);
   deepStrictEqual(starts, { a: 0, b: 0 });
@@ -314,7 +320,7 @@ test("protected entrypoint starts only authorized requested workspaces and valid
   deepStrictEqual(starts, { a: 1, b: 0 });
   strictEqual((await fetch(`${ui.url}/api/v1/bootstrap`, { headers: { authorization: "Bearer bob" } })).status, 200);
   deepStrictEqual(starts, { a: 1, b: 1 });
-  strictEqual((await fetch(`${ui.url}/`)).status, 401);
+  strictEqual((await fetch(`${ui.url}/`)).status, 200);
   const wrong = { ...workspaces[0], mcpTransport: { ...workspaces[0].mcpTransport,
     async callTool() { return { emitted: true, response: { tenant_id: "wrong", workspace_id: "workspace-a", state_dir: workspaces[0].stateDir } }; } } };
   const invalid = await startSupabaseCalibrationApi({ supabase: { ...authConfig, fetch: simulatedSupabase().fetch }, workspaces: [wrong] });

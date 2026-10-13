@@ -43,6 +43,15 @@ jobs:
       - name: Tests (node:test)
         run: npm test
 
+      - name: Install browser for invitation regression
+        run: npx playwright install --with-deps chromium
+
+      - name: First activation on served HTML
+        run: npm run test:browser
+
+      - name: Publication and release evidence checks
+        run: python3 -m unittest discover -s docs/validation/provider-registry-session/preproduction -p 'test_release*.py'
+
   secrets-scan:
     name: Secrets scan
     runs-on: ubuntu-latest

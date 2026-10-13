@@ -7,6 +7,7 @@
     <style>
       :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #111827; color: #e5e7eb; }
       body { margin: 0; }
+      [hidden] { display: none !important; }
       main { max-width: 1100px; margin: auto; padding: 24px; }
       nav { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0 24px; }
       button, input, textarea, select { font: inherit; border-radius: 6px; border: 1px solid #4b5563; padding: 8px; }
@@ -43,12 +44,32 @@
       th:first-child { text-align: left; }
     </style>
     <script type="module">/*__CALIBRATION_TEMPLATE__*/</script>
+    <script src="/calibration-auth.js" defer></script>
     <script src="/calibration-client.js" defer></script>
   </head>
   <body>
     <main>
       <h1>Calibration ElevenLabs</h1>
       <p id="status" class="muted" role="status">Chargement…</p>
+      <section id="login" hidden>
+        <h2>Connexion</h2>
+        <p class="muted">Connectez-vous pour accéder à votre espace de calibration.</p>
+        <form id="login-form">
+          <label>Email<input id="login-email" name="email" type="email" autocomplete="username" required></label>
+          <label>Mot de passe<input id="login-password" name="password" type="password" autocomplete="current-password" required></label>
+          <button id="login-submit" type="submit">Se connecter</button>
+        </form>
+      </section>
+      <p id="account" hidden><span id="account-email"></span> <button id="logout" type="button">Se déconnecter</button></p>
+      <section id="password-setup" hidden>
+        <h2>Définir votre mot de passe</h2>
+        <form id="password-form">
+          <label>Nouveau mot de passe<input id="new-password" type="password" minlength="12" autocomplete="new-password" required></label>
+          <label>Confirmer le mot de passe<input id="confirm-password" type="password" minlength="12" autocomplete="new-password" required></label>
+          <button id="password-submit" type="submit">Activer mon accès</button>
+        </form>
+      </section>
+      <div id="workspace" hidden>
       <nav aria-label="Vues">
         <button data-view="home">Accueil / configuration</button>
         <button data-view="summary">Récapitulatif</button>
@@ -116,6 +137,7 @@
         <button id="publish-profile" disabled>Rendre la voix disponible dans les projets</button>
       </section>
 
+      </div>
     </main>
   </body>
 </html>

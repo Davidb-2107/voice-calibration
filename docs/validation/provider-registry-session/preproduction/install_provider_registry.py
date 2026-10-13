@@ -10,7 +10,6 @@ import uuid
 HERE = Path(__file__).resolve().parent
 SOURCE = HERE.parent / 'work/supabase-tenant-adapter/Shared/voice-calibration'
 sys.path.insert(0, str(SOURCE))
-from voice_calibration.core.provider_registry import ProviderRegistry
 from restore import write_record
 
 
@@ -39,9 +38,17 @@ def validate(config):
         controls.add(control)
 
 
-def install():
+def install(candidate=None):
     config = json.loads((HERE / 'config.json').read_text())
     validate(config)
+    if candidate is not None:
+        validate(candidate)
+        for field in ('host', 'provider', 'jobQueue', 'recoveryDir'):
+            if candidate[field] != config[field]:
+                raise RuntimeError('Publication must preserve installation and queue bindings')
+        previous = {w['workspaceId']: w for w in candidate['workspaces']}
+        if any(previous.get(w['workspaceId']) != w for w in config['workspaces']):
+            raise RuntimeError('Publication must preserve existing workspace bindings')
     recovery = Path(config['recoveryDir']).resolve()
     queue = Path(config['jobQueue']['dataDir']).resolve()
     claim = {'pid': os.getpid(), 'install_id': uuid.uuid4().hex}
@@ -63,7 +70,14 @@ def install():
             lock.unlink()
         raise RuntimeError('Stop API before upgrading') from None
     # An interrupted or failed installation keeps both claims for manual recovery.
-    _install(config)
+    if candidate is None:
+        _install(config)
+    else:
+        assert_engines_stopped(config)
+        if json.loads((HERE / 'config.json').read_text()) != config:
+            raise RuntimeError('Configuration changed during publication')
+        write_record(HERE / 'config.json', candidate)
+        config = candidate
     if json.loads(owner.read_text()) != claim or json.loads(lock.read_text()) != claim:
         raise RuntimeError('Installation ownership changed unexpectedly')
     owner.unlink()
@@ -71,13 +85,18 @@ def install():
     print(json.dumps({'status': 'installed', 'image': config['image'], 'quarantine': 'unchanged', 'provider_calls': 0}))
 
 
-def _install(config):
+def assert_engines_stopped(config):
     active = subprocess.check_output(['docker', 'ps', '-q'], text=True).split()
     if active:
         rows = json.loads(subprocess.check_output(['docker', 'inspect', *active], text=True))
         data = Path(config['jobQueue']['dataDir']).resolve().parent
         if any(Path(m['Source']).resolve().is_relative_to(data) for row in rows for m in row['Mounts']):
             raise RuntimeError('Workspace engines must be stopped')
+
+
+def _install(config):
+    from voice_calibration.core.provider_registry import ProviderRegistry
+    assert_engines_stopped(config)
     for workspace in config['workspaces']:
         control = Path(workspace['engine']['restoreGuardDir'])
         directory, key = control / 'provider-registry', control / 'provider-registry.key'

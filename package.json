@@ -21,6 +21,7 @@
   "scripts": {
     "build": "node scripts/clean-dist.mjs && tsc && node scripts/build-calibration-ui.mjs",
     "test": "cd test && node --test --test-reporter=spec",
+    "test:browser": "node --test test/browser/invitation.spec.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "biome ci --formatter-enabled=false .",
     "dev": "npm run build && node dist/calibration-cli.js --open",
@@ -41,6 +42,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "@types/node": "^25.6.0",
+    "playwright": "1.62.1",
     "tsx": "^4.0.0",
     "typescript": "^5.6.0"
   },

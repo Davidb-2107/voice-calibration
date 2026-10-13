@@ -288,6 +288,7 @@ export async function startSupabaseCalibrationApi(
       closeApplications,
       jobQueue: queue,
       resolveApplication: createSupabaseWorkspaceResolver(options.supabase, applications),
+      browserAuth: { url: options.supabase.url, publishableKey: options.supabase.publishableKey },
     });
   } catch (error) {
     await closeApplications();

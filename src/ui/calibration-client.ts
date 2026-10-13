@@ -1,4 +1,226 @@
 type JsonRecord = Record<string, unknown>;
+declare const CALIBRATION_AUTH: { url: string; publishableKey: string } | null;
+const browserAuth = typeof CALIBRATION_AUTH === "undefined" ? null : CALIBRATION_AUTH;
+type BrowserSession = {
+  access_token: string;
+  refresh_token: string;
+  expires_at: number;
+  user: { email?: string };
+  needsPassword?: boolean;
+};
+let browserSession: BrowserSession | null = null;
+let renewing: Promise<void> | undefined;
+let sessionGeneration = 0;
+const sessionKey = `voice-calibration-session:${browserAuth?.url}`;
+
+function showLogin(): void {
+  element("workspace").hidden = true;
+  element("account").hidden = true;
+  element("login").hidden = false;
+}
+
+function forgetSession(): void {
+  sessionGeneration++;
+  renewing = undefined;
+  browserSession = null;
+  sessionStorage.removeItem(sessionKey);
+  state.nonce = null;
+  state.bootstrap = null;
+  state.corpus = null;
+  state.run = null;
+  showLogin();
+}
+
+async function authenticate(grant: string, input: JsonRecord): Promise<void> {
+  if (!browserAuth) throw new Error("Connexion indisponible.");
+  if (grant === "password") {
+    sessionGeneration++;
+    renewing = undefined;
+  }
+  const generation = sessionGeneration;
+  const response = await fetch(`${browserAuth.url.replace(/\/$/, "")}/auth/v1/token?grant_type=${grant}`, {
+    method: "POST",
+    headers: { apikey: browserAuth.publishableKey, "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok)
+    throw new Error(
+      grant === "password" ? "Connexion refusée. Vérifiez vos identifiants." : "Session expirée. Reconnectez-vous.",
+    );
+  const session = await response.json();
+  if (
+    typeof session.access_token !== "string" ||
+    typeof session.refresh_token !== "string" ||
+    typeof session.expires_in !== "number" ||
+    !session.user
+  )
+    throw new Error("Session Supabase invalide.");
+  if (generation !== sessionGeneration) throw new Error("Connexion requise.");
+  browserSession = {
+    access_token: session.access_token,
+    refresh_token: session.refresh_token,
+    expires_at: Math.floor(Date.now() / 1000) + session.expires_in,
+    user: { email: session.user.email },
+    needsPassword: grant === "refresh_token" ? browserSession?.needsPassword : undefined,
+  };
+  sessionStorage.setItem(sessionKey, JSON.stringify(browserSession));
+}
+
+async function sessionToken(): Promise<string> {
+  if (!browserSession) throw new Error("Connexion requise.");
+  const generation = sessionGeneration;
+  if (browserSession.expires_at <= Date.now() / 1000 + 30) {
+    if (!renewing) {
+      const pending = authenticate("refresh_token", { refresh_token: browserSession.refresh_token })
+        .catch((error) => {
+          if (generation === sessionGeneration) forgetSession();
+          throw error;
+        })
+        .finally(() => {
+          if (renewing === pending) renewing = undefined;
+        });
+      renewing = pending;
+    }
+    await renewing;
+  }
+  if (generation !== sessionGeneration || !browserSession) throw new Error("Connexion requise.");
+  return browserSession.access_token;
+}
+
+async function initializeSession(): Promise<void> {
+  if (!browserAuth) {
+    const workspace = document.getElementById("workspace");
+    if (workspace) workspace.hidden = false;
+    await refresh();
+    return;
+  }
+  showLogin();
+  element("login-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const button = element<HTMLButtonElement>("login-submit");
+    button.disabled = true;
+    const password = element<HTMLInputElement>("login-password");
+    void authenticate("password", { email: element<HTMLInputElement>("login-email").value, password: password.value })
+      .then(() => location.reload())
+      .catch(() => showStatus("Connexion refusée ou indisponible. Vérifiez vos identifiants et réessayez.", true))
+      .finally(() => {
+        password.value = "";
+        button.disabled = false;
+      });
+  });
+  element("logout").addEventListener("click", () => {
+    if (state.executionInProgress) return;
+    const token = browserSession?.access_token;
+    forgetSession();
+    void fetch(`${browserAuth.url.replace(/\/$/, "")}/auth/v1/logout?scope=local`, {
+      method: "POST",
+      headers: { apikey: browserAuth.publishableKey, Authorization: `Bearer ${token}` },
+    })
+      .finally(() => location.reload())
+      .catch(() => {});
+  });
+  if (typeof location.hash === "string" && location.hash.includes("access_token=")) {
+    const tokens = new URLSearchParams(location.hash.slice(1));
+    history.replaceState(null, "", location.pathname);
+    const token = tokens.get("access_token");
+    const refreshToken = tokens.get("refresh_token");
+    const lifetime = Number(tokens.get("expires_in"));
+    if (
+      !["invite", "recovery"].includes(tokens.get("type") ?? "") ||
+      !token ||
+      !refreshToken ||
+      !Number.isFinite(lifetime) ||
+      lifetime <= 0
+    )
+      throw new Error("Invitation invalide ou expirée.");
+    const response = await fetch(`${browserAuth.url.replace(/\/$/, "")}/auth/v1/user`, {
+      headers: { apikey: browserAuth.publishableKey, Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error("Invitation invalide ou expirée.");
+    const user = await response.json();
+    if (typeof user.email !== "string") throw new Error("Invitation invalide.");
+    sessionStorage.setItem(
+      sessionKey,
+      JSON.stringify({
+        access_token: token,
+        refresh_token: refreshToken,
+        expires_at: Math.floor(Date.now() / 1000) + lifetime,
+        user: { email: user.email },
+        needsPassword: true,
+      }),
+    );
+  }
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(sessionKey) ?? "null");
+    if (
+      stored &&
+      typeof stored.access_token === "string" &&
+      typeof stored.refresh_token === "string" &&
+      Number.isFinite(stored.expires_at) &&
+      stored.user &&
+      typeof stored.user.email === "string"
+    )
+      browserSession = stored;
+  } catch {
+    sessionStorage.removeItem(sessionKey);
+  }
+  if (!browserSession) {
+    showStatus("Connectez-vous pour continuer.");
+    return;
+  }
+  await sessionToken();
+  if (browserSession.needsPassword) {
+    element("login").hidden = true;
+    element("password-setup").hidden = false;
+    showStatus("Choisissez un mot de passe d’au moins 12 caractères.");
+    element("password-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const password = element<HTMLInputElement>("new-password");
+      const confirmation = element<HTMLInputElement>("confirm-password");
+      if (password.value.length < 12 || password.value !== confirmation.value) {
+        showStatus("Les mots de passe doivent être identiques et contenir au moins 12 caractères.", true);
+        return;
+      }
+      const button = element<HTMLButtonElement>("password-submit");
+      button.disabled = true;
+      void sessionToken()
+        .then((token) =>
+          fetch(`${browserAuth.url.replace(/\/$/, "")}/auth/v1/user`, {
+            method: "PUT",
+            headers: {
+              apikey: browserAuth.publishableKey,
+              Authorization: `Bearer ${token}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ password: password.value }),
+          }),
+        )
+        .then((response) => {
+          if (!response.ok || !browserSession) throw new Error("Mot de passe refusé. Réessayez.");
+          delete browserSession.needsPassword;
+          sessionStorage.setItem(sessionKey, JSON.stringify(browserSession));
+          location.reload();
+        })
+        .catch(() =>
+          showStatus("Impossible de définir le mot de passe. Réessayez ou demandez une nouvelle invitation.", true),
+        )
+        .finally(() => {
+          password.value = "";
+          confirmation.value = "";
+          button.disabled = false;
+        });
+    });
+    return;
+  }
+  element("account").hidden = false;
+  element("account-email").textContent = browserSession.user.email ?? "Compte connecté";
+  showStatus("Ouverture de votre espace…");
+  await refresh();
+  element("login").hidden = true;
+  element("account").hidden = false;
+  element("account-email").textContent = browserSession.user.email ?? "Compte connecté";
+  element("workspace").hidden = false;
+}
 
 const CALIBRATION_VOICE_SETTINGS: JsonRecord = {
   stability: 0.5,
@@ -169,6 +391,7 @@ async function loadVoiceName(): Promise<void> {
 
 async function api(path: string, init: RequestInit = {}): Promise<{ response: Response; body: JsonRecord | unknown }> {
   const headers = new Headers(init.headers);
+  if (browserAuth) headers.set("Authorization", `Bearer ${await sessionToken()}`);
   if (init.body && !headers.has("content-type")) headers.set("content-type", "application/json");
   if (init.method && init.method !== "GET" && state.nonce) headers.set("X-Calibration-Nonce", state.nonce);
   const response = await fetch(`/api/v1${path}`, { ...init, headers });
@@ -179,6 +402,7 @@ async function api(path: string, init: RequestInit = {}): Promise<{ response: Re
     throw new Error("Réponse JSON invalide du serveur local");
   }
   if (!response.ok) {
+    if (browserAuth && response.status === 401) forgetSession();
     const message =
       (body as JsonRecord)?.error && typeof (body as JsonRecord).error === "object"
         ? ((body as JsonRecord).error as JsonRecord).message
@@ -319,6 +543,8 @@ function renderRun(): void {
   const approveButton = element<HTMLButtonElement>("approve");
   approveButton.disabled = state.executionInProgress || !run || run.status !== "dry_run_ready";
   const executeButton = element<HTMLButtonElement>("execute");
+  const logoutButton = document.getElementById("logout") as HTMLButtonElement | null;
+  if (logoutButton) logoutButton.disabled = state.executionInProgress;
   executeButton.disabled = state.executionInProgress || !run || run.status !== "approved";
   executeButton.textContent = state.executionInProgress ? "Calibrage en cours…" : "Lancer le calibrage réel";
   executeButton.setAttribute("aria-busy", String(state.executionInProgress));
@@ -489,4 +715,4 @@ function bind(): void {
 }
 
 bind();
-void refresh().catch((error) => showStatus(String(error.message), true));
+void initializeSession().catch((error) => showStatus(String(error.message), true));

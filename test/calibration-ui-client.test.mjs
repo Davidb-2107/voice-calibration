@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CLIENT = readFileSync(resolve(ROOT, "dist/ui/calibration-client.js"), "utf8");
 
-class FakeHeaders {
+export class FakeHeaders {
   constructor(init = {}) {
     this.values = new Map(Object.entries(init).map(([key, value]) => [key.toLowerCase(), String(value)]));
   }
@@ -26,7 +26,7 @@ class FakeHeaders {
   }
 }
 
-class FakeElement {
+export class FakeElement {
   constructor(id = "") {
     this.id = id;
     this.dataset = {};
