@@ -423,6 +423,8 @@ function actionError(message: string, status: number): string {
     return "Cette opération nécessite une vérification. Ne la relancez pas ; demandez la réconciliation de son résultat.";
   if (/restore|quarantine|provider registry/i.test(message))
     return "Cet espace est bloqué pour protéger vos données. Demandez une vérification avant de reprendre.";
+  if (status === 409 && /possède déjà un (?:profil de )?calibrage publié\./i.test(message))
+    return "Cette voix possède déjà un profil de calibration publié. Vous pouvez l’utiliser dans vos projets. Aucune nouvelle synthèse ne sera lancée.";
   if (/expir|unexpired/i.test(message))
     return "L’approbation a expiré. Ouvrez « Simulation (dry-run) » et cliquez sur « Renouveler l’approbation ».";
   if (/calibrage est déjà en cours|conflicting run|active.*run/i.test(message))

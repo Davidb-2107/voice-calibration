@@ -65,3 +65,15 @@ test("uncertain operations stay disabled and technical expiry errors have action
   const message = vm.runInContext('actionError("Unexpired approval required before queue admission",409)', f.context);
   ok(message.includes("approbation a expiré") && message.includes("Renouveler"));
 });
+
+test("published voice conflicts explain reuse without exposing the technical error", async () => {
+  const f = await fixture();
+  const expected = "Cette voix possède déjà un profil de calibration publié. Vous pouvez l’utiliser dans vos projets. Aucune nouvelle synthèse ne sera lancée.";
+  for (const message of [
+    'La voix "voice-a" possède déjà un calibrage publié. Aucune nouvelle synthèse ne sera lancée.',
+    'La voix "voice-a" possède déjà un profil de calibrage publié. Aucune nouvelle synthèse ne sera lancée.',
+  ]) {
+    strictEqual(vm.runInContext(`actionError(${JSON.stringify(message)},409)`, f.context), expected);
+  }
+  ok(vm.runInContext('actionError("execution_unknown",409)', f.context).includes("Ne la relancez pas"));
+});
