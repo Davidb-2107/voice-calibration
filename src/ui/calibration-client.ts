@@ -243,6 +243,7 @@ const state: {
   voiceName: string | null;
   voiceNameStatus: "idle" | "loading" | "loaded" | "unavailable";
   executionInProgress: boolean;
+  approvalInProgress: boolean;
 } = {
   nonce: null,
   bootstrap: null,
@@ -251,6 +252,7 @@ const state: {
   voiceName: null,
   voiceNameStatus: "idle",
   executionInProgress: false,
+  approvalInProgress: false,
 };
 
 const element = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -303,7 +305,7 @@ function renderResult(): void {
         ? "Voix prête à être utilisée dans les projets."
         : "Résultat validé."
       : status === "failed"
-        ? "Le calibrage réel a échoué."
+        ? `Le calibrage ${simulatedProvider() ? "simulé" : "réel"} a échoué.`
         : "Le résultat du calibrage doit être vérifié.";
   target.append(heading);
 
@@ -341,8 +343,17 @@ function renderResult(): void {
   appendResultDetail(details, "WPM minimum", precision.min);
   appendResultDetail(details, "WPM maximum", precision.max);
   appendResultDetail(details, "Dispersion", precision.spread_pct, "%");
-  appendResultDetail(details, "Crédits utilisés", metrics.actual_credits_used);
-  appendResultDetail(details, "Coût estimé", metrics.estimated_cost_usd, " USD");
+  appendResultDetail(
+    details,
+    simulatedProvider() ? "Crédits simulés" : "Crédits utilisés",
+    metrics.actual_credits_used,
+  );
+  appendResultDetail(
+    details,
+    simulatedProvider() ? "Coût indicatif" : "Coût estimé",
+    metrics.estimated_cost_usd,
+    " USD",
+  );
   if (details.children.length > 0) {
     const technical = document.createElement("details");
     const technicalSummary = document.createElement("summary");
@@ -389,6 +400,44 @@ async function loadVoiceName(): Promise<void> {
   renderResult();
 }
 
+function simulatedProvider(): boolean {
+  return (state.bootstrap?.config as JsonRecord | undefined)?.providerMode === "simulated";
+}
+
+function approvalExpired(run: JsonRecord | null): boolean {
+  if (run?.status !== "approved") return false;
+  const approval = run.approval as JsonRecord | null;
+  const expiry = Date.parse(String(approval?.expiresAt ?? ""));
+  return !Number.isFinite(expiry) || expiry <= Date.now();
+}
+
+function approvalRenewable(run: JsonRecord | null): boolean {
+  const approval = run?.approval as JsonRecord | null;
+  return (
+    approvalExpired(run) && approval?.consumedAt === null && Number.isFinite(Date.parse(String(approval.expiresAt)))
+  );
+}
+
+function actionError(message: string, status: number): string {
+  if (/execution_unknown|provider execution evidence|consumed.*approval/i.test(message))
+    return "Cette opération nécessite une vérification. Ne la relancez pas ; demandez la réconciliation de son résultat.";
+  if (/restore|quarantine|provider registry/i.test(message))
+    return "Cet espace est bloqué pour protéger vos données. Demandez une vérification avant de reprendre.";
+  if (/expir|unexpired/i.test(message))
+    return "L’approbation a expiré. Ouvrez « Simulation (dry-run) » et cliquez sur « Renouveler l’approbation ».";
+  if (/calibrage est déjà en cours|conflicting run|active.*run/i.test(message))
+    return "Une simulation existe déjà pour cette voix. Ouvrez « Simulation (dry-run) » pour la reprendre.";
+  if (/configuration.*(mismatch|identity)|digest mismatch/i.test(message))
+    return "La configuration a changé. Faites vérifier la simulation avant de l’approuver à nouveau.";
+  if (status === 401) return "Votre session a expiré. Reconnectez-vous pour continuer.";
+  if (status === 403) return "Vous n’avez pas accès à cette opération. Vérifiez le compte utilisé.";
+  if (status === 400 || status === 422)
+    return "La demande est invalide. Vérifiez les champs renseignés puis réessayez.";
+  if (status === 409)
+    return "Cette action n’est pas disponible dans l’état actuel. Actualisez votre espace pour vérifier la situation.";
+  return "Le service est temporairement indisponible. Actualisez votre espace avant de réessayer.";
+}
+
 async function api(path: string, init: RequestInit = {}): Promise<{ response: Response; body: JsonRecord | unknown }> {
   const headers = new Headers(init.headers);
   if (browserAuth) headers.set("Authorization", `Bearer ${await sessionToken()}`);
@@ -407,7 +456,7 @@ async function api(path: string, init: RequestInit = {}): Promise<{ response: Re
       (body as JsonRecord)?.error && typeof (body as JsonRecord).error === "object"
         ? ((body as JsonRecord).error as JsonRecord).message
         : `HTTP ${response.status}`;
-    throw new Error(String(message));
+    throw new Error(actionError(String(message), response.status));
   }
   return { response, body };
 }
@@ -503,16 +552,29 @@ function renderObservationSummary(): void {
 
 function renderRun(): void {
   const run = state.run;
+  const expired = approvalExpired(run);
+  const simulated = simulatedProvider();
+  const calibration = simulated ? "simulé" : "réel";
+  const banner = document.getElementById("provider-banner");
+  if (banner) banner.hidden = !simulated;
+  const notice = document.getElementById("execution-notice");
+  if (notice)
+    notice.textContent = simulated
+      ? "Fournisseur simulé — aucune dépense réelle. Une approbation explicite reste nécessaire."
+      : "Le calibrage réel ne démarre qu’après l’approbation et peut entraîner le coût estimé ci-dessus.";
   const status = run ? String(run.status) : "";
   const stateMessage = state.executionInProgress
-    ? "Calibrage réel en cours…"
-    : {
-        dry_run_ready: "Simulation prête à être approuvée.",
-        approved: "Simulation approuvée. Le calibrage réel n’est pas encore lancé.",
-        succeeded: "Calibrage réel terminé.",
-        failed: "Le calibrage réel a échoué.",
-        execution_unknown: "L’état du calibrage réel doit être vérifié.",
-      }[status];
+    ? `Calibrage ${calibration} en cours…`
+    : expired
+      ? "Approbation expirée. Renouvelez l’approbation pour reprendre cette simulation."
+      : {
+          dry_run_ready: "Simulation prête à être approuvée.",
+          approved: `Simulation approuvée. Le calibrage ${calibration} n’est pas encore lancé.`,
+          succeeded: `Calibrage ${calibration} terminé.`,
+          failed: `Le calibrage ${calibration} a échoué.`,
+          running: `Calibrage ${calibration} en cours…`,
+          execution_unknown: "Résultat incertain. Une vérification est nécessaire ; ne relancez pas cette opération.",
+        }[status];
   element<HTMLElement>("dry-run-state").textContent = run
     ? (stateMessage ?? `État : ${status}`)
     : "Aucune simulation préparée. Retournez dans « Préparer » pour commencer.";
@@ -527,31 +589,45 @@ function renderRun(): void {
     const details = [
       requestsPlanned === undefined ? "" : `${String(requestsPlanned)} requête(s) planifiée(s)`,
       raw.billable_characters === undefined ? "" : `${String(raw.billable_characters)} caractères facturables`,
-      raw.estimated_cost_usd === undefined ? "" : `coût estimé : ${String(raw.estimated_cost_usd)} USD`,
+      raw.estimated_cost_usd === undefined
+        ? ""
+        : simulated
+          ? `coût indicatif : ${String(raw.estimated_cost_usd)} USD · dépense réelle : 0 USD`
+          : `coût estimé : ${String(raw.estimated_cost_usd)} USD`,
     ].filter(Boolean);
     const nextStep = state.executionInProgress
-      ? "Le calibrage réel est en cours. Ne fermez pas cette page."
-      : status === "approved"
-        ? "Le calibrage réel n’est pas encore lancé."
-        : status === "succeeded"
-          ? "Le calibrage réel est terminé. Consultez l’onglet Résultat."
-          : status === "failed"
-            ? "Le calibrage réel a échoué. Consultez l’onglet Résultat."
-            : "Vérifiez le récapitulatif puis approuvez la simulation.";
+      ? `Le calibrage ${calibration} est en cours. Ne fermez pas cette page.`
+      : expired
+        ? "Renouvelez l’approbation ; aucune nouvelle simulation ne sera créée."
+        : status === "approved"
+          ? `Le calibrage ${calibration} n’est pas encore lancé.`
+          : status === "succeeded"
+            ? `Le calibrage ${calibration} est terminé. Consultez l’onglet Résultat.`
+            : status === "failed"
+              ? `Le calibrage ${calibration} a échoué. Consultez l’onglet Résultat.`
+              : "Vérifiez le récapitulatif puis approuvez la simulation.";
     summary.textContent = `Simulation préparée${details.length ? ` · ${details.join(" · ")}` : ""}. ${nextStep}`;
   }
   const approveButton = element<HTMLButtonElement>("approve");
-  approveButton.disabled = state.executionInProgress || !run || run.status !== "dry_run_ready";
+  approveButton.disabled =
+    state.executionInProgress ||
+    state.approvalInProgress ||
+    !run ||
+    (run.status !== "dry_run_ready" && !approvalRenewable(run));
+  approveButton.textContent = expired ? "Renouveler l’approbation" : "Approuver la simulation";
   const executeButton = element<HTMLButtonElement>("execute");
   const logoutButton = document.getElementById("logout") as HTMLButtonElement | null;
-  if (logoutButton) logoutButton.disabled = state.executionInProgress;
-  executeButton.disabled = state.executionInProgress || !run || run.status !== "approved";
-  executeButton.textContent = state.executionInProgress ? "Calibrage en cours…" : "Lancer le calibrage réel";
+  if (logoutButton) logoutButton.disabled = state.executionInProgress || state.approvalInProgress;
+  executeButton.disabled =
+    state.executionInProgress || state.approvalInProgress || !run || run.status !== "approved" || expired;
+  executeButton.textContent = state.executionInProgress ? "Calibrage en cours…" : `Lancer le calibrage ${calibration}`;
   executeButton.setAttribute("aria-busy", String(state.executionInProgress));
   const executionProgress = element<HTMLElement>("execution-progress");
   executionProgress.hidden = !state.executionInProgress;
   executionProgress.textContent = state.executionInProgress
-    ? "Les audios sont en cours de génération par ElevenLabs. Ne fermez pas cette page."
+    ? simulated
+      ? "Exécution simulée en cours — aucune dépense réelle."
+      : "Les audios sont en cours de génération par ElevenLabs. Ne fermez pas cette page."
     : "";
   renderResult();
   const publishButton = element<HTMLButtonElement>("publish-profile");
@@ -627,23 +703,45 @@ async function prepare(event: SubmitEvent): Promise<void> {
 }
 
 async function approve(): Promise<void> {
-  if (!state.run) return;
-  state.run = (
-    await api(`/calibration-runs/${state.run.id}/approve`, {
-      method: "POST",
-      body: JSON.stringify({ requestDigest: state.run.requestDigest }),
-    })
-  ).body as JsonRecord;
+  if (!state.run || state.approvalInProgress || (state.run.status !== "dry_run_ready" && !approvalRenewable(state.run)))
+    return;
+  const renewing = approvalExpired(state.run);
+  state.approvalInProgress = true;
   renderRun();
-  showStatus("Simulation approuvée. Le calibrage réel n’est pas encore lancé.");
+  try {
+    state.run = (
+      await api(`/calibration-runs/${state.run.id}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ requestDigest: state.run.requestDigest }),
+      })
+    ).body as JsonRecord;
+    showStatus(
+      renewing
+        ? "Approbation renouvelée. Vous pouvez lancer le calibrage."
+        : "Simulation approuvée. Vous pouvez lancer le calibrage.",
+    );
+  } finally {
+    state.approvalInProgress = false;
+    renderRun();
+  }
 }
 
 async function execute(): Promise<void> {
-  if (!state.run || state.executionInProgress) return;
+  if (!state.run || state.executionInProgress || state.run.status !== "approved") return;
+  if (approvalExpired(state.run)) {
+    renderRun();
+    activateView("dry-run");
+    showStatus("Approbation expirée. Renouvelez l’approbation avant de lancer le calibrage.", true);
+    return;
+  }
   const runId = String(state.run.id);
   state.executionInProgress = true;
   renderRun();
-  showStatus("Calibrage réel en cours… Les audios sont en cours de génération. Ne fermez pas cette page.");
+  showStatus(
+    simulatedProvider()
+      ? "Calibrage simulé en cours — aucune dépense réelle."
+      : "Calibrage réel en cours… Les audios sont en cours de génération. Ne fermez pas cette page.",
+  );
   try {
     state.run = (await api(`/calibration-runs/${runId}/execute`, { method: "POST", body: "{}" })).body as JsonRecord;
     if (["succeeded", "failed", "execution_unknown"].includes(String(state.run.status))) {
@@ -656,15 +754,15 @@ async function execute(): Promise<void> {
     renderRun();
     activateView("result");
     await loadVoiceName();
-    showStatus("Run terminé ; le profil WPM reste une publication séparée.");
+    showStatus("Calibrage terminé. Publiez le profil pour rendre la voix disponible dans vos projets.");
   } catch (error) {
     try {
       state.run = (await api(`/calibration-runs/${runId}`)).body as JsonRecord;
       renderRun();
-      activateView("result");
+      activateView(approvalExpired(state.run) ? "dry-run" : "result");
       await loadVoiceName();
       if (state.run.status === "succeeded") {
-        showStatus("Calibrage réel terminé ; le profil WPM reste une publication séparée.");
+        showStatus("Calibrage terminé. Publiez le profil pour rendre la voix disponible dans vos projets.");
         return;
       }
     } catch {
@@ -715,4 +813,9 @@ function bind(): void {
 }
 
 bind();
+if (typeof setInterval === "function") {
+  setInterval(() => {
+    if (state.run?.status === "approved") renderRun();
+  }, 1000);
+}
 void initializeSession().catch((error) => showStatus(String(error.message), true));

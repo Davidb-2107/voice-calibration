@@ -20,6 +20,7 @@ import { canonicalLocalPath, resolveLocalDataDir } from "./local-store.js";
 import { createLocalStore } from "./ports.js";
 
 export interface CalibrationUiOptions {
+  providerMode?: "simulated" | "elevenlabs";
   tenantId?: string;
   workspaceId?: string;
   dataDir?: string;
@@ -152,6 +153,7 @@ export async function createVoiceCalibrationApplication(
       : {}),
   });
   const application = createCalibrationApplication({
+    providerMode: options.providerMode,
     repositories: createLocalStore(resolvedDataDir),
     configurationIdentity,
     bridge,

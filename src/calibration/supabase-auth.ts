@@ -184,6 +184,7 @@ export async function startSupabaseCalibrationApi(
     port?: number;
     publicOrigin?: string;
     allowUnisolatedLocal?: boolean;
+    providerMode?: "simulated" | "elevenlabs";
     jobQueue?: { dataDir: string; maxConcurrentJobs?: number };
   } & EngineManagerOptions,
 ): Promise<CalibrationUiHandle> {
@@ -257,6 +258,7 @@ export async function startSupabaseCalibrationApi(
       create: async () => {
         const application = await createVoiceCalibrationApplication({
           ...workspace,
+          providerMode: options.providerMode,
           mcpTransport:
             workspace.mcpTransport instanceof DockerMcpStdioTransport
               ? new DockerMcpStdioTransport(workspace.mcpTransport.binding)

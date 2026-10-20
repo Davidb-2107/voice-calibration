@@ -28,7 +28,7 @@ if (existsSync(stopFile)) unlinkSync(stopFile);
 const workspaces = config.workspaces.map(w => ({ ...w,
   mcpTransport: new DockerMcpStdioTransport({ ...w.engine, image: config.image }) }));
 const api = await startSupabaseCalibrationApi({ host: config.host, port: config.apiPort,
-  supabase: config.supabase, workspaces, jobQueue: config.jobQueue,
+  supabase: config.supabase, workspaces, jobQueue: config.jobQueue, providerMode: config.provider,
   maxConcurrentStarts: 4, idleTimeoutMs: 600000 });
 let closing = false;
 const health = createServer(async (request, response) => {

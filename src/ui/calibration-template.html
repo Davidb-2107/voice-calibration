@@ -50,6 +50,7 @@
   <body>
     <main>
       <h1>Calibration ElevenLabs</h1>
+      <p id="provider-banner" role="status" hidden>Fournisseur simulé — aucune dépense réelle</p>
       <p id="status" class="muted" role="status">Chargement…</p>
       <section id="login" hidden>
         <h2>Connexion</h2>
@@ -127,7 +128,7 @@
         <button id="approve" disabled>Approuver la simulation</button>
         <button id="execute" disabled>Lancer le calibrage réel</button>
         <p id="execution-progress" class="progress-note" role="status" aria-live="polite" hidden></p>
-        <p class="muted">Le calibrage réel ne démarre qu’après l’approbation et peut entraîner le coût estimé ci-dessus.</p>
+        <p id="execution-notice" class="muted">Le calibrage réel ne démarre qu’après l’approbation et peut entraîner le coût estimé ci-dessus.</p>
       </section>
 
       <section id="view-result" class="view">

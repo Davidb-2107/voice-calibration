@@ -159,7 +159,7 @@ test("client resynchronizes the run after execute returns an HTTP failure", asyn
     },
     approval: null,
   };
-  const approved = { ...run, status: "approved", approval: { approvedAt: "now" } };
+  const approved = { ...run, status: "approved", approval: { approvedAt: "now", expiresAt: "2099-01-01T00:00:00Z", consumedAt: null } };
   const failed = {
     ...approved,
     status: "failed",
@@ -322,13 +322,14 @@ test("client resynchronizes the run after execute returns an HTTP failure", asyn
   );
   strictEqual(elements.get("execute").disabled, true);
   terminalRecovery = true;
+  vm.runInContext(`state.run = ${JSON.stringify(approved)}`, context);
   elements.get("execute").disabled = false;
   elements.get("execute").dispatch("click");
   await flush();
   await flush();
   strictEqual(
     elements.get("status").textContent,
-    "Calibrage réel terminé ; le profil WPM reste une publication séparée.",
+    "Calibrage terminé. Publiez le profil pour rendre la voix disponible dans vos projets.",
     "a recovered successful run must not be shown as an execution error",
   );
   ok(

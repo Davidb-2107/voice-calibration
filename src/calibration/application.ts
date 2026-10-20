@@ -38,7 +38,7 @@ export interface CalibrationInput {
 
 export interface BootstrapView {
   sessionNonce: string;
-  config: { configured: boolean };
+  config: { configured: boolean; providerMode?: "simulated" | "elevenlabs" };
   activeCorpus: CorpusVersion | null;
   profiles: VoiceProfile[];
   recentRuns: CalibrationRun[];
@@ -54,6 +54,7 @@ export interface CorpusView {
 export interface CalibrationApplicationOptions {
   repositories: LocalStore;
   configurationIdentity?: string;
+  providerMode?: "simulated" | "elevenlabs";
   bridge: CalibrationBridge;
   canonical: CanonicalProfilePort;
   credentials?: CredentialProvider;
@@ -287,6 +288,7 @@ function normalizeCoreWorkflowError(error: unknown): Error {
 export class CalibrationApplication {
   private readonly repositories: LocalStore;
   private readonly configurationIdentity?: string;
+  private readonly providerMode?: "simulated" | "elevenlabs";
   private readonly bridge: CalibrationBridge;
   private readonly canonical: CanonicalProfilePort;
   private readonly credentials?: CredentialProvider;
@@ -298,6 +300,9 @@ export class CalibrationApplication {
   private readonly sessionNonce: string;
 
   constructor(options: CalibrationApplicationOptions) {
+    if (options.providerMode !== undefined && !["simulated", "elevenlabs"].includes(options.providerMode))
+      throw new TypeError("invalid providerMode");
+    this.providerMode = options.providerMode;
     if (
       options.configurationIdentity !== undefined &&
       !/^v[123]:hmac-sha256:[a-f0-9]{64}$/u.test(options.configurationIdentity)
@@ -488,7 +493,7 @@ export class CalibrationApplication {
     ]);
     return {
       sessionNonce: this.sessionNonce,
-      config: { configured: config.configured },
+      config: { configured: config.configured, ...(this.providerMode ? { providerMode: this.providerMode } : {}) },
       activeCorpus,
       profiles,
       recentRuns: recentRuns.sort(recentRunSort).slice(0, 20),
@@ -647,11 +652,20 @@ export class CalibrationApplication {
         await this.repositories.runs.save(approved);
         return approved;
       }
-      if (run.status !== "dry_run_ready")
-        throw new ConflictError(`approval requires dry_run_ready state, got ${run.status}`);
       if (input.requestDigest !== run.requestDigest) throw new ConflictError("request digest mismatch");
+      if (run.status === "approved") {
+        if (!run.approval || run.approval.consumedAt !== null)
+          throw new ConflictError("consumed or invalid approval cannot be renewed; reconciliation required");
+        const expiry = Date.parse(run.approval.expiresAt);
+        if (!Number.isFinite(expiry)) throw new ConflictError("invalid approval expiry; verification required");
+        if (expiry > this.clock.now().getTime()) return run;
+      } else if (run.status !== "dry_run_ready")
+        throw new ConflictError(`approval requires dry_run_ready state, got ${run.status}`);
       const expiresAt = new Date(this.clock.now().getTime() + APPROVAL_TTL_MS).toISOString();
-      const approved = transitionRun(run, { type: "approve", expiresAt });
+      const approved =
+        run.status === "approved"
+          ? { ...run, approval: { approvedAt: nowIso(this.clock), expiresAt, consumedAt: null } }
+          : transitionRun(run, { type: "approve", expiresAt });
       if (approved.approval) approved.approval.approvedAt = nowIso(this.clock);
       approved.updatedAt = nowIso(this.clock);
       await this.repositories.runs.save(approved);
