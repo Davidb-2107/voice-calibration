@@ -19,7 +19,7 @@ for (const workspace of config.workspaces) {
     throw new Error('Initialized independent provider registry required');
 }
 const guardedImage = await promisify(execFile)('docker', ['image', 'inspect', '--format',
-  '{{index .Config.Labels "voice-calibration.local-patch"}}', config.image], { timeout: 10000 });
+  '{{index .Config.Labels "voice-calibration.local-patch"}}', config.image], { timeout: 10000, windowsHide: true });
 if (guardedImage.stdout.trim() !== 'provider-registry') throw new Error('Image with independent provider registry required');
 const { startSupabaseCalibrationApi, DockerMcpStdioTransport } = await import(pathToFileURL(config.module));
 const control = dirname(process.argv[2]);
@@ -37,10 +37,10 @@ const health = createServer(async (request, response) => {
     const anonymous = await fetch(api.url + '/api/v1/bootstrap', { signal: AbortSignal.timeout(5000) });
     const auth = await fetch(config.supabase.url + '/auth/v1/health', {
       headers: { apikey: config.supabase.publishableKey }, signal: AbortSignal.timeout(10000) });
-    await promisify(execFile)('docker', ['image', 'inspect', config.image], { timeout: 10000 });
+    await promisify(execFile)('docker', ['image', 'inspect', config.image], { timeout: 10000, windowsHide: true });
     const owner = JSON.parse(readFileSync(join(config.jobQueue.dataDir, 'owner.lock'), 'utf8'));
     const registryCheck = await promisify(execFile)(config.registryPython,
-      [join(control, 'provider_registry_status.py'), process.argv[2]], { timeout: 10000 });
+      [join(control, 'provider_registry_status.py'), process.argv[2]], { timeout: 10000, windowsHide: true });
     const registry = JSON.parse(registryCheck.stdout);
     const executionReady = config.workspaces.every(workspace =>
       JSON.parse(readFileSync(join(workspace.engine.restoreGuardDir, 'guard.json'), 'utf8')).state === 'ready');
