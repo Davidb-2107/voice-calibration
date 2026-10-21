@@ -442,6 +442,11 @@ async function dispatch(
       sendJson(response, 200, { ...run, report: await application.getReport(workspaceId, runId) });
       return;
     }
+    if (method === "GET" && /^\/api\/v1\/voice-profiles\/[^/]+\/export$/.test(url.pathname)) {
+      const payload = await application.exportProjectVoice(workspaceId, idFromPath(url.pathname));
+      sendJson(response, 200, payload, { "content-disposition": 'attachment; filename="voice-profile.json"' });
+      return;
+    }
     if (method === "GET" && url.pathname === "/api/v1/voice-profiles") {
       sendJson(response, 200, await application.listVoiceProfiles(workspaceId));
       return;

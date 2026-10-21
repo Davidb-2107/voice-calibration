@@ -23,6 +23,7 @@ import { assertWorkspaceId, transitionRun } from "./domain.js";
 import { fingerprintRequest } from "./fingerprint.js";
 import type { LocalStore } from "./ports.js";
 import { ConflictError, type VoiceDirectoryPort } from "./ports.js";
+import { projectProfilePackage } from "./project-profile.js";
 import { redactSensitive } from "./redaction.js";
 
 export interface Clock {
@@ -265,6 +266,7 @@ function projectCoreRun(core: CoreRunRecord, previous?: CalibrationRun): Calibra
     id: core.runId,
     workspaceId: core.workspaceId,
     configurationIdentity: previous?.configurationIdentity,
+    ...(previous?.executionProvider ? { executionProvider: previous.executionProvider } : {}),
     status: core.status as CalibrationRun["status"],
     idempotencyKey: core.runId,
     request: coreRequestToResolved(core, previous?.request),
@@ -353,6 +355,8 @@ export class CalibrationApplication {
   }
 
   private assertRunConfiguration(run: CalibrationRun): void {
+    if (run.executionProvider !== undefined && run.executionProvider !== this.providerMode)
+      throw new ConflictError("configuration_mismatch: mode fournisseur modifié", "configuration_mismatch");
     if (this.hasCompatibleConfiguration(run)) return;
     const code = run.configurationIdentity === undefined ? "configuration_identity_missing" : "configuration_mismatch";
     throw new ConflictError(code, code);
@@ -605,6 +609,7 @@ export class CalibrationApplication {
     const timestamp = nowIso(this.clock);
     const run: CalibrationRun = {
       id,
+      ...(this.providerMode ? { executionProvider: this.providerMode } : {}),
       workspaceId: input.workspaceId,
       configurationIdentity: this.configurationIdentity,
       status: "draft",
@@ -900,6 +905,32 @@ export class CalibrationApplication {
   async listVoiceProfiles(workspaceId = DEFAULT_WORKSPACE): Promise<VoiceProfile[]> {
     assertWorkspaceId(workspaceId);
     return this.repositories.profiles.list(workspaceId);
+  }
+
+  async exportProjectVoice(workspaceId: string, profileId: string) {
+    assertWorkspaceId(workspaceId);
+    if (this.providerMode !== "elevenlabs")
+      throw new ConflictError("Les profils simulés ne sont pas utilisables pour produire des vidéos TikTok.");
+    const profile = (await this.repositories.profiles.list(workspaceId)).find(
+      (row) => row.id === profileId && row.workspaceId === workspaceId,
+    );
+    if (!profile) throw new NotFoundError("profil publié introuvable dans cet espace");
+    const run = await this.getRunOrThrow(workspaceId, profile.sourceRunId);
+    if (run.executionProvider !== "elevenlabs")
+      throw new ConflictError("La provenance réelle de ce calibrage n’est pas attestée ; export vers TikTok bloqué.");
+    if (!this.canonical.readPublishedRecord) throw new UnavailableError("source canonique indisponible pour l’export");
+    try {
+      await this.canonical.ensurePublished({
+        voiceRef: profile.voiceRef,
+        wpm: profile.wpmSnapshot,
+        runId: run.id,
+        corpusVersionId: profile.corpusVersionId,
+        language: run.request.params.language === "en" ? "en" : "fr",
+      });
+      return projectProfilePackage(run, profile, await this.canonical.readPublishedRecord(profile.voiceRef));
+    } catch (error) {
+      throw new ContractValidationError(errorMessage(error));
+    }
   }
 
   async close(): Promise<void> {

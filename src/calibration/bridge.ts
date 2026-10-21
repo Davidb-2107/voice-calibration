@@ -56,6 +56,7 @@ export interface CoreRunRecord {
   raw: unknown;
 }
 export interface CanonicalProfilePort {
+  readPublishedRecord?(voiceRef: string): Promise<Record<string, unknown>>;
   ensurePublished(input: {
     voiceRef: string;
     wpm: number;
@@ -865,6 +866,13 @@ export function createCanonicalProfilePort(
   const referenceBase = options.referenceBase ?? (wpmPath ? pathToFileURL(wpmPath).href : undefined);
   const readCorpus = options.readCorpus ?? (() => readFile(wpmPath!, "utf8"));
   return {
+    async readPublishedRecord(voiceRef) {
+      if (!wpmPath) throw new Error("canonical_wpm_unavailable");
+      const data = JSON.parse(await readCorpus()) as Record<string, unknown>;
+      const record = data[voiceRef];
+      if (!record || typeof record !== "object" || Array.isArray(record)) throw new Error("canonical_wpm_unavailable");
+      return record as Record<string, unknown>;
+    },
     async getObservationSummary() {
       return readObservationSummary(wpmPath, readCorpus);
     },
