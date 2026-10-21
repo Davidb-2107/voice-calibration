@@ -4,7 +4,25 @@ Le profil représente une configuration immuable : fournisseur, voix, modèle, r
 
 ## Sélection à la création ou configuration
 
-Le lanceur de l’instance TikTok configure `VOICE_CALIBRATION_API_URL` et une session Supabase valide dans `VOICE_CALIBRATION_ACCESS_TOKEN`. URL HTTPS obligatoire, sauf en boucle locale. Aucun token, clé ElevenLabs ou chemin de stockage dans le projet. Le serveur résout le workspace depuis la session. Une expiration de session, une indisponibilité ou une différence de prédicteur bloque ; aucun repli vers le corpus local.
+Le lanceur Windows du vault (`Shared/tiktok.py`) fournit désormais la session au client Python en mémoire et renouvelle ses tokens avant les requêtes, sans token dans les arguments, les fichiers projet ou l'environnement des sous-processus. La connexion du navigateur SaaS ne connecte pas ce lanceur. Sa procédure complète, les prérequis et la portée/suppression du coffre Windows sont décrits dans `Shared/voice-calibration/docs/tiktok-launcher.md` du dépôt Wiki_Claude.
+
+Depuis la racine du vault avec le runtime prescrit par `DEV-ENV.md` :
+
+```bash
+python Shared/tiktok.py login --account personnel --api-url http://127.0.0.1:4317
+python Shared/tiktok.py profiles --account personnel
+python Shared/tiktok.py create --account personnel --name MonProjet --project-type mon_projet --slug pilote --voice-profile '<ID>'
+python Shared/tiktok.py configure --account personnel --project-dir Projects/TikTok/MonProjet --voice-profile '<ID>'
+python Shared/tiktok.py check --project-dir Projects/TikTok/MonProjet
+python Shared/tiktok.py gate --episode Projects/TikTok/MonProjet/outputs/01-pilote
+python Shared/tiktok.py logout --account personnel
+```
+
+Pour Neon_Psycho, ajouter `--keep-project-gate` à `configure`. Les commandes suivantes retrouvent le nom de connexion et la liaison vérifiée dans `_project/calibration-connection.json`, sans secret ni copie de corpus. Connexion, renouvellement et déconnexion n'exécutent aucune opération métier. La commande `produce --episode <épisode>` appelle le synthétiseur existant avec ses contrôles ; une synthèse incertaine reste bloquée et une mesure en attente est renvoyée seule.
+
+URL HTTPS obligatoire, sauf en boucle locale. Aucun token, clé ElevenLabs ou chemin de stockage dans le projet. Le serveur résout le workspace depuis la session. Une expiration/révocation, une indisponibilité ou une différence de prédicteur bloque ; aucun repli vers le corpus local. La préproduction simulée permet de vérifier les sessions, mais ses profils restent exclus de la production.
+
+Les points d'entrée directs suivants restent disponibles pour les intégrations existantes. Leur contrat bas niveau attend `VOICE_CALIBRATION_API_URL` et `VOICE_CALIBRATION_ACCESS_TOKEN` ; la fourniture manuelle d'un access token ne constitue pas le parcours utilisateur du lanceur.
 
 - Lister les profils : `python Shared/voice-calibration/onboard_project.py --list`.
 - Créer : `python Shared/scaffold_video_project.py --name MonProjet --project-type mon_projet --slug pilote --under tiktok --narration --voice-profile <ID>`.

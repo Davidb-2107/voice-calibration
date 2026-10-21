@@ -217,6 +217,7 @@ test("two protected accounts isolate corpus, consent, executions and profiles", 
   strictEqual((await call(null, "bootstrap")).status, 401);
   strictEqual(existsSync(join(root, "a", "workspaces")), false);
   const boots = await Promise.all([call("alice", "bootstrap"), call("bob", "bootstrap")]);
+  deepStrictEqual(boots.map((boot) => boot.body.workspaceId), ["workspace-a", "workspace-b"]);
   deepStrictEqual(boots.map((boot) => boot.body.identity), [
     { userId: userA, tenantId: "tenant-a" }, { userId: userB, tenantId: "tenant-b" },
   ]);

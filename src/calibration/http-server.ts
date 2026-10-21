@@ -273,7 +273,7 @@ async function dispatch(
       throw new HttpError(404, "not_found", "API route not found");
     if (method === "GET" && url.pathname === "/api/v1/bootstrap") {
       const bootstrap = await bootstrapStage("bootstrap", () => application.getBootstrap(workspaceId));
-      sendJson(response, 200, selected.identity ? { ...bootstrap, identity: selected.identity } : bootstrap);
+      sendJson(response, 200, selected.identity ? { ...bootstrap, workspaceId, identity: selected.identity } : bootstrap);
       return;
     }
     if (method === "GET" && url.pathname === "/api/v1/corpus") {
