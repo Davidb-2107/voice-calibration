@@ -310,7 +310,7 @@ function renderResult(): void {
         ? "La provenance fournisseur de ce calibrage n’est pas attestée. Export vers les projets bloqué."
         : !profilePublished
           ? "Publiez d’abord le résultat pour rendre ce profil disponible dans les projets TikTok."
-          : "Téléchargez le profil publié pour le sélectionner lors de la création ou configuration d’un projet TikTok.";
+          : "Sélectionnez ce profil dans votre projet TikTok : son corpus et son WPM évolueront automatiquement.";
   heading.textContent =
     status === "succeeded"
       ? profilePublished
@@ -806,7 +806,10 @@ async function publishProfile(): Promise<void> {
 
 async function exportProjectVoice(): Promise<void> {
   if (!state.run || simulatedProvider() || state.run.executionProvider !== "elevenlabs") return;
-  const result = await api(`/voice-profiles/${encodeURIComponent(String(state.run.id))}/export`);
+  const result = await api(`/calibration-runs/${encodeURIComponent(String(state.run.id))}/project-reference`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
   const url = URL.createObjectURL(new Blob([JSON.stringify(result.body, null, 2)], { type: "application/json" }));
   try {
     const link = document.createElement("a");
@@ -816,7 +819,7 @@ async function exportProjectVoice(): Promise<void> {
   } finally {
     URL.revokeObjectURL(url);
   }
-  showStatus("Profil téléchargé. Sélectionnez ce fichier lors de la création ou configuration du projet TikTok.");
+  showStatus("Référence téléchargée. Le projet utilisera le corpus partagé actualisé, sans réimport des mesures.");
 }
 
 function bind(): void {

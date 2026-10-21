@@ -144,6 +144,7 @@ export async function createVoiceCalibrationApplication(
           secret,
         );
   const bridge = createCalibrationBridge({
+    providerMode: options.providerMode,
     credentials,
     wpmPath,
     tenantId: options.tenantId,

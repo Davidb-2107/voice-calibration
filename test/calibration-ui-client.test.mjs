@@ -17,7 +17,7 @@ test("TikTok profile download is enabled only for an attested real publication",
     let downloadName;
     let downloads = 0;
     let revocations = 0;
-    const exported = { schema: "project-voice-package-v1", payload: "{}", digest: "sha256:test" };
+    const exported = { schema: "project-voice-reference-v1", profileId: "stable-profile", workspaceId: "tenant-a" };
     const getElementById = id => {
       if (!elements.has(id)) elements.set(id, new FakeElement(id));
       return elements.get(id);
@@ -35,7 +35,7 @@ test("TikTok profile download is enabled only for an attested real publication",
           profiles: [{ id: run.id, sourceRunId: run.id }], recentRuns: [run] });
         if (url === "/api/v1/corpus") return response({ activeVersion: { items: [] } });
         if (url === `/api/v1/calibration-runs/${run.id}`) return response(run);
-        if (url === `/api/v1/voice-profiles/${run.id}/export`) return response(exported);
+        if (url === `/api/v1/calibration-runs/${run.id}/project-reference`) return response(exported);
         return response({ error: { message: "not found" } }, 404);
       },
     });

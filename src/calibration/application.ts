@@ -23,7 +23,6 @@ import { assertWorkspaceId, transitionRun } from "./domain.js";
 import { fingerprintRequest } from "./fingerprint.js";
 import type { LocalStore } from "./ports.js";
 import { ConflictError, type VoiceDirectoryPort } from "./ports.js";
-import { projectProfilePackage } from "./project-profile.js";
 import { redactSensitive } from "./redaction.js";
 
 export interface Clock {
@@ -855,7 +854,11 @@ export class CalibrationApplication {
       const existing = (await this.repositories.profiles.list(workspaceId)).find(
         (profile) => profile.sourceRunId === runId,
       );
-      if (existing) return existing;
+      if (existing) {
+        if (run.executionProvider === "elevenlabs" && this.bridge.publishLiveProfile)
+          await this.bridge.publishLiveProfile({ workspaceId, runId });
+        return existing;
+      }
       const report = await this.loadReport(run);
       const wpm = wpmFromReport(report);
       if (wpm === null) throw new ContractValidationError("successful calibration result has no WPM");
@@ -866,7 +869,7 @@ export class CalibrationApplication {
           const publication = await this.bridge.publish({ workspaceId: run.workspaceId, runId: run.id });
           publishedWpm = publication.wpm;
           canonical = await this.canonical.ensurePublished({
-            voiceRef: run.request.voiceRef,
+            voiceRef: publication.voiceAlias ?? run.request.voiceRef,
             wpm: publishedWpm,
             runId: run.id,
             corpusVersionId: run.request.corpusVersionId,
@@ -898,6 +901,8 @@ export class CalibrationApplication {
         reportId: run.reportId as string,
         publishedAt: nowIso(this.clock),
       };
+      if (run.executionProvider === "elevenlabs" && this.bridge.publishLiveProfile)
+        await this.bridge.publishLiveProfile({ workspaceId, runId });
       return (await this.repositories.profiles.publish(profile)) ?? profile;
     });
   }
@@ -907,30 +912,33 @@ export class CalibrationApplication {
     return this.repositories.profiles.list(workspaceId);
   }
 
-  async exportProjectVoice(workspaceId: string, profileId: string) {
+  async getLiveProfiles(workspaceId: string) {
     assertWorkspaceId(workspaceId);
     if (this.providerMode !== "elevenlabs")
-      throw new ConflictError("Les profils simulés ne sont pas utilisables pour produire des vidéos TikTok.");
-    const profile = (await this.repositories.profiles.list(workspaceId)).find(
-      (row) => row.id === profileId && row.workspaceId === workspaceId,
-    );
-    if (!profile) throw new NotFoundError("profil publié introuvable dans cet espace");
-    const run = await this.getRunOrThrow(workspaceId, profile.sourceRunId);
-    if (run.executionProvider !== "elevenlabs")
-      throw new ConflictError("La provenance réelle de ce calibrage n’est pas attestée ; export vers TikTok bloqué.");
-    if (!this.canonical.readPublishedRecord) throw new UnavailableError("source canonique indisponible pour l’export");
-    try {
-      await this.canonical.ensurePublished({
-        voiceRef: profile.voiceRef,
-        wpm: profile.wpmSnapshot,
-        runId: run.id,
-        corpusVersionId: profile.corpusVersionId,
-        language: run.request.params.language === "en" ? "en" : "fr",
-      });
-      return projectProfilePackage(run, profile, await this.canonical.readPublishedRecord(profile.voiceRef));
-    } catch (error) {
-      throw new ContractValidationError(errorMessage(error));
-    }
+      throw new ConflictError("Le corpus simulé ne peut pas alimenter les projets de production.");
+    if (!this.bridge.getLiveProfiles) throw new UnavailableError("source évolutive indisponible");
+    const catalog = await this.bridge.getLiveProfiles(workspaceId);
+    if (catalog.workspaceId !== workspaceId) throw new ConflictError("workspace mismatch");
+    return { ...catalog, sessionNonce: this.getSessionNonce() };
+  }
+
+  async recordTikTokObservation(workspaceId: string, profileId: string, observation: unknown) {
+    assertWorkspaceId(workspaceId);
+    if (this.providerMode !== "elevenlabs") throw new ConflictError("Mesures simulées interdites pour la production.");
+    if (!this.bridge.recordTikTokObservation) throw new UnavailableError("source évolutive indisponible");
+    return this.bridge.recordTikTokObservation({ workspaceId, profileId, observation });
+  }
+
+  async projectVoiceReference(workspaceId: string, runId: string) {
+    const run = await this.getRunOrThrow(workspaceId, runId);
+    if (run.status !== "succeeded" || run.executionProvider !== "elevenlabs")
+      throw new ConflictError("Calibrage réel publié requis.");
+    const published = (await this.repositories.profiles.list(workspaceId)).some((p) => p.sourceRunId === runId);
+    if (!published) throw new ConflictError("Publiez d’abord le calibrage.");
+    // Migration of an already published, attested run is explicit and idempotent.
+    if (!this.bridge.publishLiveProfile) throw new UnavailableError("source évolutive indisponible");
+    const live = await this.bridge.publishLiveProfile({ workspaceId, runId });
+    return { schema: "project-voice-reference-v1", profileId: live.profileId, workspaceId };
   }
 
   async close(): Promise<void> {
