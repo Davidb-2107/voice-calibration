@@ -418,11 +418,15 @@ function approvalRenewable(run: JsonRecord | null): boolean {
   );
 }
 
-function actionError(message: string, status: number): string {
+function actionError(message: string, status: number, code?: string): string {
   if (/execution_unknown|provider execution evidence|consumed.*approval/i.test(message))
     return "Cette opération nécessite une vérification. Ne la relancez pas ; demandez la réconciliation de son résultat.";
   if (/restore|quarantine|provider registry/i.test(message))
     return "Cet espace est bloqué pour protéger vos données. Demandez une vérification avant de reprendre.";
+  if (code === "ENGINE_STARTUP_TIMEOUT" || code === "ENGINE_STARTUP_FAILED")
+    return "Le moteur n’a pas pu démarrer. Actualisez votre espace pour réessayer. Si le problème persiste, contactez l’assistance.";
+  if (code === "MCP_INITIALIZE_TIMEOUT" || code === "MCP_READINESS_TIMEOUT")
+    return "Le moteur a démarré, mais ne répond pas à temps. Actualisez votre espace pour réessayer. Si le problème persiste, contactez l’assistance.";
   if (status === 409 && /possède déjà un (?:profil de )?calibrage publié\./i.test(message))
     return "Cette voix possède déjà un profil de calibration publié. Vous pouvez l’utiliser dans vos projets. Aucune nouvelle synthèse ne sera lancée.";
   if (/expir|unexpired/i.test(message))
@@ -454,11 +458,13 @@ async function api(path: string, init: RequestInit = {}): Promise<{ response: Re
   }
   if (!response.ok) {
     if (browserAuth && response.status === 401) forgetSession();
-    const message =
+    const error =
       (body as JsonRecord)?.error && typeof (body as JsonRecord).error === "object"
-        ? ((body as JsonRecord).error as JsonRecord).message
-        : `HTTP ${response.status}`;
-    throw new Error(actionError(String(message), response.status));
+        ? ((body as JsonRecord).error as JsonRecord)
+        : {};
+    throw new Error(
+      actionError(String(error.message ?? `HTTP ${response.status}`), response.status, String(error.code ?? "")),
+    );
   }
   return { response, body };
 }
@@ -642,6 +648,7 @@ function renderRun(): void {
 
 async function refresh(): Promise<void> {
   const hadRun = state.run !== null;
+  showStatus("Démarrage du moteur et chargement de votre espace…");
   const bootstrap = await api("/bootstrap");
   state.bootstrap = bootstrap.body as JsonRecord;
   renderObservationSummary();

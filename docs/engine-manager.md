@@ -53,6 +53,18 @@ The stdio transport waits for the actual process exit: EOF first, then kill afte
 two seconds, then a further two seconds for exit confirmation. No confirmed exit
 means shutdown fails. A closed transport cannot silently respawn.
 
+For Docker engines, startup first waits for the owned container's `State.Running`
+within 30 seconds. Only then does the MCP initialize response timeout start;
+the existing response timeout remains 10 seconds per handshake request
+(`initialize`, then `tools/list`, then the workspace identity check
+`get_server_info`). These startup and MCP waits are therefore bounded by 60 seconds
+after admission to the startup queue, followed by shutdown on failure (up to four
+seconds for stdio exit and ten seconds for container removal). Waiting in that
+queue, filesystem preparation and authentication are separate from these bounds.
+The browser displays “Démarrage du moteur et chargement de votre espace…” while
+bootstrap is pending. Startup and initialize failures return safe, distinct 503
+errors; retries require an explicit user action and never replay calibration.
+
 ## Durable operations
 
 Lifecycle does not propose, approve, execute, reconcile or publish calibration.
@@ -78,8 +90,8 @@ The session report `ENGINE-MANAGER-VALIDATION.md` at the parent workspace root
 records actual Python process restart/crash checks and Windows memory/startup
 measurements. These are development-host measurements, not production capacity.
 `ENGINE-START-LIMIT-VALIDATION.md` records the subsequent Linux experiment with
-20 engines and startup limits 2, 3, 4 and 5. The 10-second handshake timeout is
-unchanged. `AUDIO-CAPACITY-BENCHMARK.md` records subsequent real audio adapter load.
+20 engines and startup limits 2, 3, 4 and 5. The MCP response timeout remains
+10 seconds, separately from Docker startup. `AUDIO-CAPACITY-BENCHMARK.md` records subsequent real audio adapter load.
 `ON-DEMAND-ENGINE-VALIDATION.md` records authorized lazy startup and explicit
 stop/wake persistence. A registered workspace is not necessarily ready: invalid
 credentials, corpus or MCP identity now fail its first authorized wake rather

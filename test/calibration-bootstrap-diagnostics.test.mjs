@@ -6,6 +6,7 @@ import { HttpError, startCalibrationUi } from "../dist/calibration/http-server.j
 import { redactSensitive } from "../dist/calibration/redaction.js";
 import { createSupabaseWorkspaceResolver } from "../dist/calibration/supabase-auth.js";
 import { createVoiceCalibrationApplication } from "../dist/calibration/entrypoint.js";
+import { BridgeTransportError } from "../dist/calibration/bridge.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,6 +31,33 @@ function application(secret, observation) {
     canonical: { getObservationSummary: observation },
   });
 }
+
+test("engine readiness failures expose safe actionable codes without retrying or leaking diagnostics", async (t) => {
+  const lines = logs(t);
+  for (const code of ["ENGINE_STARTUP_TIMEOUT", "ENGINE_STARTUP_FAILED", "MCP_INITIALIZE_TIMEOUT", "MCP_READINESS_TIMEOUT"]) {
+    let starts = 0;
+    const api = await startCalibrationUi({
+      resolveApplication: async () => {
+        starts++;
+        throw new BridgeTransportError("private container path", false, "private-provider-key", code);
+      },
+      closeApplications: async () => {},
+    });
+    try {
+      const response = await fetch(`${api.url}/api/v1/bootstrap`);
+      assert.equal(response.status, 503);
+      const body = await response.json();
+      assert.equal(body.error.code, code);
+      assert.match(body.error.message, /moteur/);
+      assert.match(body.error.message, /Réessayez/);
+      assert(!JSON.stringify(body).includes("private"));
+      assert.equal(starts, 1);
+      assert.equal(JSON.parse(lines.at(-1)).correlationId, response.headers.get("x-correlation-id"));
+    } finally {
+      await api.close();
+    }
+  }
+});
 
 test("bootstrap failure logs its exact stage with correlation and redacts before truncating", async (t) => {
   const lines = logs(t);
