@@ -131,6 +131,7 @@ class BridgeTransportError extends Error {
     message: string,
     readonly emitted: boolean,
     readonly stderr = "",
+    readonly code = "MCP_TRANSPORT_ERROR",
   ) {
     super(message);
     this.name = "BridgeTransportError";
@@ -258,7 +259,7 @@ class NodeMcpStdioTransport implements CalibrationTransport {
     return String(redact(this.stderrBuffer, this.secret));
   }
 
-  private ensureChild(secret = ""): ChildProcessWithoutNullStreams {
+  protected ensureChild(secret = ""): ChildProcessWithoutNullStreams {
     if (this.closing) throw new BridgeTransportError("MCP process closing; restart calibration bridge", false);
     if (this.terminalError) throw this.terminalError;
     if (this.child) {
@@ -300,6 +301,10 @@ class NodeMcpStdioTransport implements CalibrationTransport {
     return child;
   }
 
+  protected async start(secret: string): Promise<void> {
+    this.ensureChild(secret);
+  }
+
   private consumeStdout(chunk: string): void {
     this.buffer += chunk;
     const lines = this.buffer.split("\n");
@@ -339,7 +344,14 @@ class NodeMcpStdioTransport implements CalibrationTransport {
       let emitted = false;
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new BridgeTransportError(`MCP request timed out: ${method}`, emitted, this.diagnostic()));
+        reject(
+          new BridgeTransportError(
+            `MCP request timed out: ${method}`,
+            emitted,
+            this.diagnostic(),
+            method === "initialize" ? "MCP_INITIALIZE_TIMEOUT" : "MCP_RESPONSE_TIMEOUT",
+          ),
+        );
       }, timeoutMs);
       this.pending.set(id, {
         resolve: (response) => {
@@ -398,7 +410,7 @@ class NodeMcpStdioTransport implements CalibrationTransport {
   }
 
   async schema(secret: string, timeoutMs: number): Promise<unknown> {
-    this.ensureChild(secret);
+    await this.start(secret);
     await this.initialize(timeoutMs);
     const response = await this.request("tools/list", {}, timeoutMs);
     if (response.error)
@@ -415,12 +427,12 @@ class NodeMcpStdioTransport implements CalibrationTransport {
     secret: string,
     timeoutMs: number,
   ): Promise<TransportCall> {
-    this.ensureChild(secret);
+    await this.start(secret);
     try {
       await this.initialize(timeoutMs);
     } catch (error) {
       if (error instanceof BridgeTransportError) {
-        throw new BridgeTransportError(error.message, false, error.stderr);
+        throw new BridgeTransportError(error.message, false, error.stderr, error.code);
       }
       throw error;
     }
@@ -595,8 +607,9 @@ export function createCalibrationBridge(options: {
     if (credential.provider !== "elevenlabs")
       throw new Error(`unsupported credential provider: ${credential.provider}`);
     try {
+      const responseTimeoutMs = name === "get_server_info" ? Math.min(timeoutMs, 10_000) : timeoutMs;
       const response = transport.callTool
-        ? await transport.callTool(name, args, credential.secret, timeoutMs)
+        ? await transport.callTool(name, args, credential.secret, responseTimeoutMs)
         : name === "calibrate_voice"
           ? await transport.call(args, credential.secret, timeoutMs)
           : (() => {
@@ -613,6 +626,7 @@ export function createCalibrationBridge(options: {
           String(redact(error.message, credential.secret)),
           error.emitted,
           String(redact(error.stderr, credential.secret)),
+          error.code,
         );
       }
       throw new Error(String(redact((error as Error).message, credential.secret)));
@@ -652,7 +666,13 @@ export function createCalibrationBridge(options: {
         }
         return schema;
       } catch (error) {
-        if (error instanceof BridgeTransportError) throw new Error(String(redact(error.message, credential.secret)));
+        if (error instanceof BridgeTransportError)
+          throw new BridgeTransportError(
+            String(redact(error.message, credential.secret)),
+            error.emitted,
+            String(redact(error.stderr, credential.secret)),
+            error.code === "MCP_RESPONSE_TIMEOUT" ? "MCP_READINESS_TIMEOUT" : error.code,
+          );
         throw new Error(String(redact((error as Error).message, credential.secret)));
       }
     },

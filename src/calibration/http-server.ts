@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { ContractValidationError, NotFoundError, UnavailableError } from "./application.js";
 import { bootstrapFailure, bootstrapRequest, bootstrapStage } from "./bootstrap-diagnostics.js";
+import { BridgeTransportError } from "./bridge.js";
 import { assertWorkspaceId, InvalidWorkspaceIdError } from "./domain.js";
 import type { CalibrationEngine } from "./engine-manager.js";
 import type { CalibrationJobQueue } from "./job-queue.js";
@@ -62,6 +63,8 @@ function stringHeader(value: string | string[] | undefined): string | undefined 
 }
 
 function errorPayload(error: unknown): { code: string; message: string } {
+  const readiness = engineReadinessError(error);
+  if (readiness) return readiness;
   if (error instanceof InvalidWorkspaceIdError) return { code: error.code, message: error.message };
   if (error instanceof HttpError) return { code: error.code, message: error.message };
   if (error instanceof NotFoundError) return { code: "not_found", message: error.message };
@@ -71,6 +74,29 @@ function errorPayload(error: unknown): { code: string; message: string } {
   if (error instanceof Error && /revision conflict/i.test(error.message))
     return { code: "if_match_failed", message: error.message };
   return { code: "internal_error", message: "unexpected local failure" };
+}
+
+function engineReadinessError(error: unknown): { code: string; message: string } | undefined {
+  if (!(error instanceof BridgeTransportError)) return;
+  switch (error.code) {
+    case "ENGINE_STARTUP_TIMEOUT":
+      return {
+        code: error.code,
+        message: "Le moteur n’a pas démarré dans le délai prévu. Réessayez le chargement de votre espace.",
+      };
+    case "ENGINE_STARTUP_FAILED":
+      return {
+        code: error.code,
+        message:
+          "Le démarrage du moteur a échoué. Réessayez le chargement de votre espace ; si le problème persiste, contactez l’administrateur.",
+      };
+    case "MCP_INITIALIZE_TIMEOUT":
+    case "MCP_READINESS_TIMEOUT":
+      return {
+        code: error.code,
+        message: "Le moteur a démarré mais ne répond pas dans le délai prévu. Réessayez le chargement de votre espace.",
+      };
+  }
 }
 
 function executionHttpError(report: { error: { code: string; message: string } | null } | null): HttpError | null {
@@ -97,6 +123,7 @@ function executionHttpError(report: { error: { code: string; message: string } |
 }
 
 function statusForError(error: unknown): number {
+  if (engineReadinessError(error)) return 503;
   if (error instanceof InvalidWorkspaceIdError) return 400;
   if (error instanceof HttpError) return error.status;
   if (error instanceof NotFoundError) return 404;

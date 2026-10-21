@@ -5,7 +5,7 @@ import { mkdir, open } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { promisify } from "node:util";
 import { bootstrapStage } from "./bootstrap-diagnostics.js";
-import { NodeMcpStdioTransport } from "./bridge.js";
+import { BridgeTransportError, NodeMcpStdioTransport } from "./bridge.js";
 import { assertWorkspaceId } from "./domain.js";
 import { assertNoSymlinkWithin, canonicalLocalPath } from "./local-store.js";
 
@@ -27,6 +27,10 @@ export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
   private readonly containerName: string;
   private readonly corpusPath: string;
   private prepared?: Promise<void>;
+  private starting?: Promise<void>;
+  private containerClosing?: Promise<void>;
+  private readonly startupTimeoutMs = 30_000;
+  private stopped = false;
 
   constructor(options: DockerEngineOptions) {
     assertWorkspaceId(options.tenantId);
@@ -164,6 +168,58 @@ export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
     return bootstrapStage("mcp_handshake", () => super.schema(secret, timeoutMs));
   }
 
+  protected override async start(secret: string): Promise<void> {
+    if (this.stopped)
+      throw new BridgeTransportError("Engine container startup closed", false, "", "ENGINE_STARTUP_FAILED");
+    this.ensureChild(secret);
+    this.starting ??= bootstrapStage("container_start", async () => {
+      const deadline = performance.now() + this.startupTimeoutMs;
+      try {
+        while (!this.stopped) {
+          this.ensureChild(secret);
+          const remaining = deadline - performance.now();
+          if (remaining <= 0)
+            throw new BridgeTransportError("Engine container startup timed out", false, "", "ENGINE_STARTUP_TIMEOUT");
+          const running = await this.inspectRunning(Math.min(1_000, remaining));
+          if (performance.now() >= deadline)
+            throw new BridgeTransportError("Engine container startup timed out", false, "", "ENGINE_STARTUP_TIMEOUT");
+          if (running && !this.stopped) return;
+          await new Promise((resolve) => setTimeout(resolve, Math.min(100, Math.max(0, deadline - performance.now()))));
+        }
+        throw new BridgeTransportError("Engine container startup closed", false, "", "ENGINE_STARTUP_FAILED");
+      } catch (error) {
+        try {
+          await this.close();
+        } catch {
+          throw new BridgeTransportError(
+            "Engine container startup failed; cleanup unconfirmed",
+            false,
+            "",
+            "ENGINE_STARTUP_FAILED",
+          );
+        }
+        if (error instanceof BridgeTransportError && error.code === "ENGINE_STARTUP_TIMEOUT") throw error;
+        throw new BridgeTransportError("Engine container startup failed", false, "", "ENGINE_STARTUP_FAILED");
+      }
+    });
+    await this.starting;
+  }
+
+  private async inspectRunning(timeout: number): Promise<boolean> {
+    try {
+      const result = await promisify(execFile)(
+        "docker",
+        ["inspect", "--format", "{{.State.Running}}", this.containerName],
+        { timeout, windowsHide: true },
+      );
+      return result.stdout.trim() === "true";
+    } catch (error) {
+      const failure = error as Error & { stderr?: string; killed?: boolean };
+      if (failure.killed || /No such (container|object)/i.test(String(failure.stderr))) return false;
+      throw error;
+    }
+  }
+
   async readCorpus(secret: string): Promise<string> {
     await this.schema(secret, 10_000);
     // Resolve mutable workspace paths only inside its private mount namespace.
@@ -184,13 +240,24 @@ export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
   }
 
   override async close(): Promise<void> {
-    try {
-      await super.close();
-    } finally {
-      // The trusted host owns cleanup; a stuck engine cannot keep its container alive.
-      await promisify(execFile)("docker", ["rm", "--force", this.containerName], { timeout: 10_000 }).catch((error) => {
-        if (!/No such (container|object)/i.test(String(error.stderr))) throw error;
-      });
-    }
+    this.stopped = true;
+    this.containerClosing ??= (async () => {
+      try {
+        await super.close();
+      } finally {
+        // The trusted host owns cleanup; a stuck engine cannot keep its container alive.
+        await this.removeContainer();
+      }
+    })();
+    return this.containerClosing;
+  }
+
+  private async removeContainer(): Promise<void> {
+    await promisify(execFile)("docker", ["rm", "--force", this.containerName], {
+      timeout: 10_000,
+      windowsHide: true,
+    }).catch((error) => {
+      if (!/No such (container|object)/i.test(String(error.stderr))) throw error;
+    });
   }
 }

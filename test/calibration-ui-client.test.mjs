@@ -429,3 +429,50 @@ test("client restores the latest run and report after a page reload", async () =
   ok(calls.some((call) => call.url === "/api/v1/calibration-runs/run-restore"));
   ok(calls.some((call) => call.url === "/api/v1/voices/voice-restore"));
 });
+
+test("bootstrap shows engine startup, then a result or actionable error without retrying operations", async (t) => {
+  for (const code of [null, "ENGINE_STARTUP_TIMEOUT", "ENGINE_STARTUP_FAILED", "MCP_INITIALIZE_TIMEOUT", "MCP_READINESS_TIMEOUT"]) {
+    await t.test(code ?? "ready", async () => {
+      const elements = new Map();
+      const getElementById = (id) => {
+        if (!elements.has(id)) elements.set(id, new FakeElement(id));
+        return elements.get(id);
+      };
+      let release;
+      const pending = new Promise((resolve) => { release = resolve; });
+      const calls = [];
+      const context = vm.createContext({
+        document: { getElementById, querySelectorAll: () => [], createElement: () => new FakeElement() },
+        Headers: FakeHeaders,
+        fetch: async (url, init = {}) => {
+          calls.push({ url, method: init.method ?? "GET" });
+          if (url === "/api/v1/bootstrap") {
+            await pending;
+            return code
+              ? response({ error: { code, message: "Internal diagnostic" } }, 503)
+              : response({ sessionNonce: "nonce", config: {}, recentRuns: [] });
+          }
+          if (url === "/api/v1/corpus") return response({ activeVersion: { items: [] } });
+          throw new Error(`unexpected fetch: ${url}`);
+        },
+      });
+      vm.runInContext(CLIENT, context);
+      strictEqual(getElementById("status").textContent, "Démarrage du moteur et chargement de votre espace…");
+      deepStrictEqual(calls, [{ url: "/api/v1/bootstrap", method: "GET" }]);
+      release();
+      await flush();
+      await flush();
+      const status = getElementById("status");
+      if (code) {
+        ok(status.textContent.includes(code.startsWith("ENGINE_") ? "n’a pas pu démarrer" : "ne répond pas à temps"));
+        ok(status.textContent.includes("Actualisez votre espace"));
+        strictEqual(status.className, "danger");
+      } else {
+        strictEqual(status.textContent, "Prêt.");
+      }
+      strictEqual(calls.filter((call) => call.url === "/api/v1/bootstrap").length, 1);
+      ok(calls.every((call) => call.method === "GET"), "startup must not execute or retry a calibration");
+      ok(vm.runInContext('actionError("execution_unknown",503,"ENGINE_STARTUP_FAILED")', context).includes("Ne la relancez pas"));
+    });
+  }
+});

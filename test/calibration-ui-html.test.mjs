@@ -10,6 +10,7 @@ test("calibration UI is built and same-origin", () => {
   ok(existsSync(resolve(ROOT, "dist/ui/calibration.html")));
   const html = readFileSync(resolve(ROOT, "dist/ui/calibration.html"), "utf8");
   const client = readFileSync(resolve(ROOT, "dist/ui/calibration-client.js"), "utf8");
+  ok(/<p id="status"[^>]*role="status"/.test(html), "engine startup and failure status must remain accessible");
   for (const match of client.matchAll(/\belement\("([^"]+)"\)/g)) {
     ok(html.includes(`id="${match[1]}"`), `built HTML is missing the required client element ${match[1]}`);
   }
