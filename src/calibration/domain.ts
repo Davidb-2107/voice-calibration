@@ -60,6 +60,7 @@ export interface CalibrationProposal {
 }
 
 export interface CalibrationRun {
+  executionProvider?: "elevenlabs" | "simulated";
   id: string;
   workspaceId: string;
   configurationIdentity?: string;

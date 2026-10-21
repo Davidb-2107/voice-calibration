@@ -32,6 +32,7 @@ export interface ExecutionResult {
   error?: { code: string; message: string };
 }
 export interface PublicationResult {
+  voiceAlias?: string;
   canonicalRef: string;
   wpm: number;
   runsPublished?: number;
@@ -83,6 +84,13 @@ export interface ObservationSummary {
   sourceAvailable: boolean;
 }
 export interface CalibrationBridge {
+  publishLiveProfile?(input: { workspaceId: string; runId: string }): Promise<Record<string, unknown>>;
+  getLiveProfiles?(workspaceId: string): Promise<Record<string, unknown>>;
+  recordTikTokObservation?(input: {
+    workspaceId: string;
+    profileId: string;
+    observation: unknown;
+  }): Promise<Record<string, unknown>>;
   onExit?(listener: () => void): void;
   getSchema(): Promise<unknown>;
   dryRun(input: { runId: string; request: ResolvedCalibrationRequest }): Promise<DryRunResult>;
@@ -573,6 +581,7 @@ function coreExecutionResult(run: CoreRunRecord): ExecutionResult {
 }
 
 export function createCalibrationBridge(options: {
+  providerMode?: "elevenlabs" | "simulated";
   transport?: CalibrationTransport;
   credentials: CredentialProvider;
   timeoutMs?: number;
@@ -641,6 +650,34 @@ export function createCalibrationBridge(options: {
 
   return {
     onExit: (listener) => transport.onExit?.(listener),
+    async publishLiveProfile(input) {
+      assertWorkspaceId(input.workspaceId);
+      const result = await invokeTool("publish_live_profile", {
+        workspace_id: input.workspaceId,
+        run_id: input.runId,
+        gateway_real_provenance: true,
+      });
+      if (result.remoteError) throw new Error("publication du profil évolutif refusée");
+      return resultObject(redact(result.response, result.secret));
+    },
+    async getLiveProfiles(workspaceId) {
+      assertWorkspaceId(workspaceId);
+      const result = await invokeTool("get_live_profiles", { workspace_id: workspaceId });
+      if (result.remoteError) throw new Error("source évolutive indisponible");
+      const catalog = resultObject(redact(result.response, result.secret));
+      if (catalog.workspaceId !== workspaceId) throw new Error("workspace mismatch");
+      return catalog;
+    },
+    async recordTikTokObservation(input) {
+      assertWorkspaceId(input.workspaceId);
+      const result = await invokeTool("record_tiktok_observation", {
+        workspace_id: input.workspaceId,
+        profile_id: input.profileId,
+        observation: input.observation,
+      });
+      if (result.remoteError) throw new Error("mesure TikTok refusée");
+      return resultObject(redact(result.response, result.secret));
+    },
     async getSchema() {
       let credential: { provider: string; secret: string };
       try {
@@ -697,6 +734,7 @@ export function createCalibrationBridge(options: {
     async propose(input) {
       assertWorkspaceId(input.workspaceId);
       const result = await invokeTool("propose_calibration", {
+        ...(options.providerMode && input.request.postproc === "cut" ? { profile_scope: options.providerMode } : {}),
         workspace_id: input.workspaceId,
         ...makeGateRequest(input.request),
         corpus_version_id: input.request.corpusVersionId,
@@ -771,6 +809,7 @@ export function createCalibrationBridge(options: {
       }
       return {
         canonicalRef: publicationObject.canonical_ref,
+        ...(typeof publicationObject.voice === "string" ? { voiceAlias: publicationObject.voice } : {}),
         wpm: publicationObject.wpm,
         runsPublished:
           typeof publicationObject.runs_published === "number" ? publicationObject.runs_published : undefined,

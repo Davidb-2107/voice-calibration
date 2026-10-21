@@ -41,6 +41,9 @@ Options utiles :
 --allow-network        autoriser explicitement un bind non local
 ```
 
+Les [profils destinés aux projets TikTok](docs/tiktok-project-profiles.md) relient les publications réelles
+au scaffold et à la configuration des projets Wiki_Claude, dont Neon_Psycho.
+
 Le bind est local par défaut. L’interface impose le corpus publié, le
 snapshot approuvé, le dry-run, l’approbation avant l’appel facturable,
 l’idempotence des runs et la protection des secrets.

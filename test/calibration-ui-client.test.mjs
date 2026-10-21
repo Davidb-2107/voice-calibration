@@ -8,6 +8,53 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CLIENT = readFileSync(resolve(ROOT, "dist/ui/calibration-client.js"), "utf8");
 
+test("TikTok profile download is enabled only for an attested real publication", async () => {
+  for (const [providerMode, executionProvider, disabled] of [
+    ["elevenlabs", "elevenlabs", false], ["simulated", "simulated", true], ["elevenlabs", undefined, true],
+  ]) {
+    const elements = new Map();
+    let downloaded;
+    let downloadName;
+    let downloads = 0;
+    let revocations = 0;
+    const exported = { schema: "project-voice-reference-v1", profileId: "stable-profile", workspaceId: "tenant-a" };
+    const getElementById = id => {
+      if (!elements.has(id)) elements.set(id, new FakeElement(id));
+      return elements.get(id);
+    };
+    const run = { id: "published-run", status: "succeeded", executionProvider, request: { voiceRef: "Voice1" } };
+    const context = vm.createContext({
+      document: { getElementById, querySelectorAll: () => [], createElement: tag => tag === "a"
+        ? { click() { downloads++; downloadName = this.download; } } : new FakeElement() },
+      Headers: FakeHeaders,
+      Blob,
+      URL: { createObjectURL: blob => { downloaded = blob; return "blob:test"; },
+        revokeObjectURL: url => { strictEqual(url, "blob:test"); revocations++; } },
+      fetch: async url => {
+        if (url === "/api/v1/bootstrap") return response({ sessionNonce: "nonce", config: { configured: true, providerMode },
+          profiles: [{ id: run.id, sourceRunId: run.id }], recentRuns: [run] });
+        if (url === "/api/v1/corpus") return response({ activeVersion: { items: [] } });
+        if (url === `/api/v1/calibration-runs/${run.id}`) return response(run);
+        if (url === `/api/v1/calibration-runs/${run.id}/project-reference`) return response(exported);
+        return response({ error: { message: "not found" } }, 404);
+      },
+    });
+    vm.runInContext(CLIENT, context);
+    await flush(); await flush();
+    strictEqual(getElementById("export-profile").disabled, disabled);
+    if (providerMode === "simulated") ok(getElementById("export-profile-note").textContent.includes("non exportable"));
+    if (providerMode === "elevenlabs" && !executionProvider)
+      ok(getElementById("export-profile-note").textContent.includes("provenance fournisseur"));
+    await vm.runInContext("exportProjectVoice()", context);
+    strictEqual(downloads, disabled ? 0 : 1);
+    if (!disabled) {
+      deepStrictEqual(JSON.parse(await downloaded.text()), exported);
+      strictEqual(downloadName, "voice-profile.json");
+      strictEqual(revocations, 1);
+    }
+  }
+});
+
 export class FakeHeaders {
   constructor(init = {}) {
     this.values = new Map(Object.entries(init).map(([key, value]) => [key.toLowerCase(), String(value)]));

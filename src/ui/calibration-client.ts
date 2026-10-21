@@ -299,6 +299,18 @@ function renderResult(): void {
   const heading = document.createElement("p");
   heading.className = status === "succeeded" ? "result-status" : "danger";
   const profilePublished = profilePublishedForRun(run);
+  const simulated = simulatedProvider();
+  const exportButton = document.getElementById("export-profile") as HTMLButtonElement | null;
+  if (exportButton) exportButton.disabled = simulated || !profilePublished || run?.executionProvider !== "elevenlabs";
+  const exportNote = document.getElementById("export-profile-note");
+  if (exportNote)
+    exportNote.textContent = simulated
+      ? "Profil simulé : réservé aux tests, non exportable pour produire des vidéos TikTok."
+      : run?.executionProvider !== "elevenlabs"
+        ? "La provenance fournisseur de ce calibrage n’est pas attestée. Export vers les projets bloqué."
+        : !profilePublished
+          ? "Publiez d’abord le résultat pour rendre ce profil disponible dans les projets TikTok."
+          : "Sélectionnez ce profil dans votre projet TikTok : son corpus et son WPM évolueront automatiquement.";
   heading.textContent =
     status === "succeeded"
       ? profilePublished
@@ -792,7 +804,31 @@ async function publishProfile(): Promise<void> {
   showStatus("Voix prête à être utilisée dans les projets.");
 }
 
+async function exportProjectVoice(): Promise<void> {
+  if (!state.run || simulatedProvider() || state.run.executionProvider !== "elevenlabs") return;
+  const result = await api(`/calibration-runs/${encodeURIComponent(String(state.run.id))}/project-reference`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  const url = URL.createObjectURL(new Blob([JSON.stringify(result.body, null, 2)], { type: "application/json" }));
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "voice-profile.json";
+    link.click();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+  showStatus("Référence téléchargée. Le projet utilisera le corpus partagé actualisé, sans réimport des mesures.");
+}
+
 function bind(): void {
+  document
+    .getElementById("export-profile")
+    ?.addEventListener(
+      "click",
+      () => void exportProjectVoice().catch((error) => showStatus(String(error.message), true)),
+    );
   document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => {
     button.addEventListener("click", () => activateView(button.dataset.view ?? "home"));
   });
