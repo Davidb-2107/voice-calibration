@@ -183,6 +183,7 @@ async function initializeSession(): Promise<void> {
       }
       const button = element<HTMLButtonElement>("password-submit");
       button.disabled = true;
+      let errorMessage = "Impossible de définir le mot de passe. Réessayez ou demandez une nouvelle invitation.";
       void sessionToken()
         .then((token) =>
           fetch(`${browserAuth.url.replace(/\/$/, "")}/auth/v1/user`, {
@@ -195,15 +196,19 @@ async function initializeSession(): Promise<void> {
             body: JSON.stringify({ password: password.value }),
           }),
         )
-        .then((response) => {
+        .then(async (response) => {
+          if (!response.ok) {
+            const error = await response.json().catch(() => null);
+            if (error?.error_code === "same_password")
+              errorMessage =
+                "Ce mot de passe est déjà celui de votre compte. Choisissez-en un différent, ou connectez-vous avec ce mot de passe.";
+          }
           if (!response.ok || !browserSession) throw new Error("Mot de passe refusé. Réessayez.");
           delete browserSession.needsPassword;
           sessionStorage.setItem(sessionKey, JSON.stringify(browserSession));
           location.reload();
         })
-        .catch(() =>
-          showStatus("Impossible de définir le mot de passe. Réessayez ou demandez une nouvelle invitation.", true),
-        )
+        .catch(() => showStatus(errorMessage, true))
         .finally(() => {
           password.value = "";
           confirmation.value = "";
