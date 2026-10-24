@@ -10,7 +10,7 @@ import { DockerMcpStdioTransport } from '../dist/calibration/docker-transport.js
 import { createCalibrationBridge } from '../dist/calibration/bridge.js';
 import { createCalibrationApplication } from '../dist/calibration/application.js';
 
-test('native Docker source authority survives restart; publication grants no source-data access', {
+test('native Docker source authority and private preparations survive restart without granting source-data access', {
   skip: !process.env.VOICE_CALIBRATION_TEST_ENGINE_IMAGE || !process.env.VOICE_CALIBRATION_TEST_MCP_ROOT,
 }, async t => {
   const parent = mkdtempSync(join(tmpdir(), 'reuse-native-docker-'));
@@ -57,8 +57,16 @@ test('native Docker source authority survives restart; publication grants no sou
   const right = await invoke('publish', prepared.runId);
   assert.equal(right.profileId, prepared.profileId);
   assert.deepEqual((await invoke('catalog')).profiles, [right]);
+  const a = await app.prepareProject(options.workspaceId, identity, 'create', { name: 'Docker A' });
+  const b = await app.prepareProject(options.workspaceId, identity, 'create', { name: 'Docker B' });
+  assert.notEqual(a.binding.datasetId, b.binding.datasetId);
+  assert.equal(a.productionReady, false);
   await transport.close();
   app = await launch();
+  assert.deepEqual(await app.prepareProject(options.workspaceId, identity, 'inspect', { binding: a.binding }), a);
+  assert.deepEqual(await app.prepareProject(options.workspaceId, identity, 'inspect', { binding: b.binding }), b);
+  await assert.rejects(app.prepareProject(options.workspaceId, identity, 'inspect', {
+    binding: { ...a.binding, datasetId: b.binding.datasetId } }));
   assert.deepEqual((await invoke('catalog')).profiles, [right]);
   await assert.rejects(app.authorizeSourceRead(options.workspaceId, identity, 'GET /api/v1/live-voice-profiles'));
   assert.equal((await invoke('revoke', right.grantId)).revoked, true);

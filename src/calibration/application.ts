@@ -922,6 +922,36 @@ export class CalibrationApplication {
     return { ...catalog, sessionNonce: this.getSessionNonce() };
   }
 
+  async prepareProject(workspaceId: string, identity: { userId: string; tenantId: string },
+    operation: "create" | "inspect", payload: Record<string, unknown>) {
+    assertWorkspaceId(workspaceId);
+    assertWorkspaceId(identity.userId);
+    assertWorkspaceId(identity.tenantId);
+    if (!this.bridge.prepareProject) throw new UnavailableError("Preparation unavailable");
+    let result: Record<string, unknown>;
+    try {
+      result = await this.bridge.prepareProject({ workspaceId, identity, operation, payload });
+    } catch {
+      throw new ConflictError("Préparation refusée : vérifiez la liaison, le dataset et les collisions de projet.");
+    }
+    const binding = result.binding;
+    const keys = "creationId,datasetId,name,projectId,schema,state,tenantId,userId,workspaceId";
+    if (!isRecord(binding) || Object.keys(binding).sort().join() !== keys
+        || !Object.values(binding).every(value => typeof value === "string" && value.length > 0)
+        || binding.schema !== "project-preparation-v1" || binding.state !== "preparation"
+        || binding.tenantId !== identity.tenantId || binding.userId !== identity.userId || binding.workspaceId !== workspaceId
+        || result.productionReady !== false || result.voiceProfile !== null || result.observedRuns !== 0
+        || Object.keys(result).sort().join() !== "binding,observedRuns,productionReady,voiceProfile")
+      throw new ConflictError("Preparation identity mismatch");
+    if (operation === "create" && binding.name !== payload.name)
+      throw new ConflictError("Preparation name mismatch");
+    if (operation === "inspect" && (!isRecord(payload.binding)
+        || Object.keys(payload.binding).sort().join() !== keys
+        || Object.keys(binding).some(key => binding[key] !== (payload.binding as Record<string, unknown>)[key])))
+      throw new ConflictError("Preparation binding mismatch");
+    return { binding: { ...binding }, productionReady: false, voiceProfile: null, observedRuns: 0 };
+  }
+
   async reusableProfiles(workspaceId: string, identity: { userId: string; tenantId: string },
     operation: "catalog" | "publish" | "revoke", target = "") {
     assertWorkspaceId(workspaceId);

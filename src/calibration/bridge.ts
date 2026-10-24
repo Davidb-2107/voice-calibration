@@ -1,5 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
@@ -85,6 +85,12 @@ export interface ObservationSummary {
   sourceAvailable: boolean;
 }
 export interface CalibrationBridge {
+  prepareProject?(input: {
+    workspaceId: string;
+    identity: { userId: string; tenantId: string };
+    operation: "create" | "inspect";
+    payload: Record<string, unknown>;
+  }): Promise<Record<string, unknown>>;
   reusableProfiles?(input: {
     workspaceId: string;
     identity: { userId: string; tenantId: string };
@@ -663,6 +669,28 @@ export function createCalibrationBridge(options: {
 
   return {
     onExit: (listener) => { exitListener = listener; if (exited) listener(); },
+    async prepareProject(input) {
+      const handshake = await invokeTool("get_preparation_scope", { workspace_id: input.workspaceId });
+      const scope = resultObject(handshake.response);
+      if (handshake.remoteError || scope.schema !== "project-preparation-scope-v1"
+          || scope.tenantId !== input.identity.tenantId || scope.workspaceId !== input.workspaceId
+          || typeof scope.engineId !== "string"
+          || Object.keys(scope).sort().join() !== "engineId,schema,tenantId,workspaceId")
+        throw new Error("Preparation engine scope mismatch");
+      const canonical = (value: unknown): string => JSON.stringify(value, (_key, item) =>
+        item && typeof item === "object" && !Array.isArray(item)
+          ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item);
+      const claims = { tenantId: scope.tenantId, workspaceId: scope.workspaceId, engineId: scope.engineId,
+        userId: input.identity.userId, operation: input.operation,
+        target: createHash("sha256").update(canonical(input.payload)).digest("hex"),
+        expiresAt: Math.floor(Date.now() / 1000) + 60 };
+      const signature = createHmac("sha256", handshake.secret)
+        .update("project-preparation-v1\0" + canonical(claims)).digest("hex");
+      const result = await invokeTool("prepare_project", { workspace_id: input.workspaceId,
+        operation: input.operation, payload: input.payload, capability: { claims, signature } });
+      if (result.remoteError) throw new Error("Preparation refused");
+      return resultObject(redact(result.response, result.secret));
+    },
     async reusableProfiles(input) {
       assertWorkspaceId(input.workspaceId);
       sourceScope ??= invokeTool("get_reuse_scope", { workspace_id: input.workspaceId }).catch(error => {

@@ -273,7 +273,8 @@ async function dispatch(
       throw new HttpError(404, "not_found", "API route not found");
     const reusePublish = /^\/api\/v1\/calibration-runs\/[^/]+\/reuse-publication$/.test(url.pathname);
     const reuseRevoke = /^\/api\/v1\/reusable-voice-profiles\/[^/]+\/revoke$/.test(url.pathname);
-    const metadataOnly = url.pathname.startsWith("/api/v1/reusable-voice-profiles") || reusePublish
+    const preparation = url.pathname === "/api/v1/projects/preparation";
+    const metadataOnly = preparation || url.pathname.startsWith("/api/v1/reusable-voice-profiles") || reusePublish
       || (method === "GET" && url.pathname === "/api/v1/calibration/schema");
     let sourceAccess = false;
     if (options.resolveApplication && !metadataOnly) {
@@ -285,6 +286,20 @@ async function dispatch(
         if (!(method === "GET" && url.pathname === "/api/v1/bootstrap"))
           throw new HttpError(403, "source_data_forbidden", "Explicit project/dataset source-data rights required");
       }
+    }
+    if (preparation && method === "POST") {
+      if (!options.resolveApplication || !selected.identity)
+        throw new HttpError(403, "authenticated_preparation_required", "Authenticated preparation required");
+      requireNonce(request, application);
+      const body = await parseBody(request);
+      assertRequestWorkspace(url, body, workspaceId);
+      const operation = body.operation;
+      const expected = operation === "create" ? "name,operation" : "binding,operation";
+      if ((operation !== "create" && operation !== "inspect") || Object.keys(body).sort().join() !== expected)
+        throw new HttpError(400, "invalid_preparation", "Only creation or inspection payloads are accepted");
+      const payload = operation === "create" ? { name: body.name } : { binding: body.binding };
+      sendJson(response, 200, await application.prepareProject(workspaceId, selected.identity, operation, payload));
+      return;
     }
     if (method === "GET" && url.pathname === "/api/v1/bootstrap") {
       const bootstrap = options.resolveApplication && !sourceAccess
