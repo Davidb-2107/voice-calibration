@@ -936,19 +936,31 @@ export class CalibrationApplication {
     }
     const binding = result.binding;
     const keys = "creationId,datasetId,name,projectId,schema,state,tenantId,userId,workspaceId";
+    const tracked = Object.hasOwn(payload, "operationId");
     if (!isRecord(binding) || Object.keys(binding).sort().join() !== keys
         || !Object.values(binding).every(value => typeof value === "string" && value.length > 0)
         || binding.schema !== "project-preparation-v1" || binding.state !== "preparation"
         || binding.tenantId !== identity.tenantId || binding.userId !== identity.userId || binding.workspaceId !== workspaceId
         || result.productionReady !== false || result.voiceProfile !== null || result.observedRuns !== 0
-        || Object.keys(result).sort().join() !== "binding,observedRuns,productionReady,voiceProfile")
+        || Object.keys(result).sort().join() !== (tracked
+          ? "binding,creation,observedRuns,productionReady,voiceProfile" : "binding,observedRuns,productionReady,voiceProfile"))
       throw new ConflictError("Preparation identity mismatch");
     if (operation === "create" && binding.name !== payload.name)
       throw new ConflictError("Preparation name mismatch");
-    if (operation === "inspect" && (!isRecord(payload.binding)
+    if (operation === "inspect" && !tracked && (!isRecord(payload.binding)
         || Object.keys(payload.binding).sort().join() !== keys
         || Object.keys(binding).some(key => binding[key] !== (payload.binding as Record<string, unknown>)[key])))
       throw new ConflictError("Preparation binding mismatch");
+    if (tracked) {
+      const creation = result.creation;
+      if (!isRecord(creation) || Object.keys(creation).sort().join() !== "expectedGeneration,operationId,root"
+          || typeof creation.operationId !== "string" || !/^[0-9a-f]{32}$/.test(creation.operationId)
+          || creation.operationId !== payload.operationId || typeof creation.root !== "string" || creation.root.length > 1024
+          || !Number.isSafeInteger(creation.expectedGeneration) || (creation.expectedGeneration as number) < 1
+          || operation === "create" && (creation.root !== payload.root || creation.expectedGeneration !== payload.expectedGeneration))
+        throw new ConflictError("Preparation operation mismatch");
+      return { binding: { ...binding }, creation: { ...creation }, productionReady: false, voiceProfile: null, observedRuns: 0 };
+    }
     return { binding: { ...binding }, productionReady: false, voiceProfile: null, observedRuns: 0 };
   }
 

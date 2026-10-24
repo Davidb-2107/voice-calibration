@@ -92,9 +92,10 @@ test('real launcher, authenticated HTTP, bridge and MCP create two private unsel
     fetch(api.url + '/api/v1/projects/preparation' + query, { method: 'POST',
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'x-calibration-nonce': nonce },
       body: JSON.stringify(body) });
-  const launch = (args, script = 'reusable_launcher_fixture.py') => new Promise((resolveResult, reject) => {
+  const launch = (args, script = 'reusable_launcher_fixture.py', extraEnv = {}) => new Promise((resolveResult, reject) => {
     const child = spawn(process.env.VOICE_CALIBRATION_TEST_PYTHON,
-      ['-B', join(engine, 'tests', script), api.url, '--vault-root', vault, ...args], { windowsHide: true });
+      ['-B', join(engine, 'tests', script), api.url, '--vault-root', vault, ...args], { windowsHide: true,
+        env: { ...process.env, VOICE_CALIBRATION_TEST_AUTHORITY: join(root, 'TEST-authority'), ...extraEnv } });
     let stdout = '', stderr = '';
     child.stdout.on('data', data => { stdout += data; });
     child.stderr.on('data', data => { stderr += data; });
@@ -105,7 +106,7 @@ test('real launcher, authenticated HTTP, bridge and MCP create two private unsel
   assert.equal((await call({ operation: 'create', name: 'Bad nonce' }, { nonce: 'wrong' })).status, 409);
   for (const key of ['tenantId', 'workspaceId', 'userId', 'projectId', 'datasetId', 'path'])
     assert.equal((await call({ operation: 'create', name: 'Forged', [key]: 'foreign' })).status, 400);
-  const create = (name, extra = []) => launch(['create', '--name', name, '--root', join(root, 'projects'),
+  const create = (name, extra = []) => launch(['create', '--account', 'test', '--name', name, '--root', join(root, 'projects'),
     '--project-type', 'preparation_fixture', '--slug', 'pilot', ...extra]);
   const publication = await fetch(api.url + `/api/v1/calibration-runs/${fixture.runId}/reuse-publication`, {
     method: 'POST', headers: { authorization: 'Bearer owner-token', 'content-type': 'application/json',
@@ -141,10 +142,28 @@ test('real launcher, authenticated HTTP, bridge and MCP create two private unsel
     assert.equal((await call({ operation: 'inspect', binding: { ...a, [key]: b[key] } })).status, 409);
   assert.equal((await call({ operation: 'create', name: 'Project A' })).status, 409);
   const aBefore = hash(join(projectA, '_project/voice.json'));
-  assert.equal((await create('Project A')).code, 1);
+  const resumed = await create('Project A');
+  assert.equal(resumed.code, 0, resumed.stderr + resumed.stdout);
+  assert.deepEqual(JSON.parse(readFileSync(join(projectA, '_project/calibration-connection.json'))).preparation, a);
   assert.equal(hash(join(projectA, '_project/voice.json')), aBefore);
   assert.equal((await create('../escape')).code, 1);
   assert.equal((await create('Selected', ['--voice-profile', fixture.profileId])).code, 1);
+  for (const boundary of ['journal', 'registry', 'pin', 'reread', 'complete']) {
+    const name = `Interrupted ${boundary}`;
+    const args = ['create', '--account', 'test', '--name', name, '--root', join(root, 'projects'),
+      '--project-type', 'preparation_fixture', '--slug', 'pilot'];
+    const cut = await launch(args, 'reusable_launcher_fixture.py', { VOICE_CALIBRATION_TEST_CUT: boundary });
+    assert.equal(cut.code, 1, boundary + cut.stderr);
+    const saved = readFileSync(join(root, 'projects', name, '_project/calibration-connection.json'), 'utf8');
+    const resumed = await launch(args);
+    assert.equal(resumed.code, 0, boundary + resumed.stderr + resumed.stdout);
+    assert.equal(readFileSync(join(root, 'projects', name, '_project/calibration-connection.json'), 'utf8'), saved);
+  }
+  const concurrent = await Promise.all([create('Concurrent'), create('Concurrent')]);
+  for (const result of concurrent) assert.equal(result.code, 0, result.stderr + result.stdout);
+  const control = JSON.parse(readFileSync(join(root, 'TEST-authority/registry.json')));
+  assert.equal(control.generation, 9);
+  assert.equal(control.projects.length, 8);
   assert.equal((await call({ operation: 'produce', binding: a })).status, 400);
   assert.equal((await call({ operation: 'inspect', binding: a }, { query: '?workspaceId=foreign' })).status, 400);
   revoked = true;

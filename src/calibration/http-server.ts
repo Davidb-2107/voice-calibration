@@ -294,10 +294,13 @@ async function dispatch(
       const body = await parseBody(request);
       assertRequestWorkspace(url, body, workspaceId);
       const operation = body.operation;
-      const expected = operation === "create" ? "name,operation" : "binding,operation";
+      const tracked = Object.hasOwn(body, "operationId");
+      const expected = operation === "create"
+        ? tracked ? "expectedGeneration,name,operation,operationId,root" : "name,operation"
+        : tracked ? "operation,operationId" : "binding,operation";
       if ((operation !== "create" && operation !== "inspect") || Object.keys(body).sort().join() !== expected)
         throw new HttpError(400, "invalid_preparation", "Only creation or inspection payloads are accepted");
-      const payload = operation === "create" ? { name: body.name } : { binding: body.binding };
+      const { operation: _operation, ...payload } = body;
       sendJson(response, 200, await application.prepareProject(workspaceId, selected.identity, operation, payload));
       return;
     }
