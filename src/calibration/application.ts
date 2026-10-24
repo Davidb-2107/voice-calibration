@@ -922,6 +922,42 @@ export class CalibrationApplication {
     return { ...catalog, sessionNonce: this.getSessionNonce() };
   }
 
+  async reusableProfiles(workspaceId: string, identity: { userId: string; tenantId: string },
+    operation: "catalog" | "publish" | "revoke", target = "") {
+    assertWorkspaceId(workspaceId);
+    assertWorkspaceId(identity.userId);
+    assertWorkspaceId(identity.tenantId);
+    if (this.providerMode !== "elevenlabs") throw new ConflictError("Profils simulés exclus de la réutilisation.");
+    if (!this.bridge.reusableProfiles) throw new UnavailableError("Publication autorisée indisponible.");
+    let result: Record<string, unknown>;
+    try {
+      result = await this.bridge.reusableProfiles({ workspaceId, identity, operation, target });
+    } catch {
+      throw new ConflictError("Réutilisation refusée : vérifiez le droit sur la source, sa calibration et sa disponibilité.");
+    }
+    if (operation === "catalog") {
+      if (result.schema !== "reusable-voice-profiles-v1" || result.workspaceId !== workspaceId
+          || result.tenantId !== identity.tenantId || result.userId !== identity.userId || !Array.isArray(result.profiles))
+        throw new ConflictError("reuse catalog identity mismatch");
+      return { schema: result.schema, workspaceId, tenantId: identity.tenantId, userId: identity.userId,
+        profiles: result.profiles.map(publicReusableProfile), sessionNonce: this.getSessionNonce() };
+    }
+    if (operation === "revoke") {
+      if (result.grantId !== target || result.revoked !== true || !Number.isSafeInteger(result.version))
+        throw new ConflictError("invalid reuse revocation");
+      return { grantId: target, version: result.version, revoked: true };
+    }
+    return publicReusableProfile(result);
+  }
+
+  async authorizeSourceRead(workspaceId: string, identity: { userId: string; tenantId: string }, resource: string) {
+    assertWorkspaceId(workspaceId);
+    if (!this.bridge.reusableProfiles) throw new ConflictError("Source-data authority unavailable");
+    const result = await this.bridge.reusableProfiles({ workspaceId, identity, operation: "source-read", target: resource });
+    if (result.authorized !== true || result.workspaceId !== workspaceId || result.tenantId !== identity.tenantId)
+      throw new ConflictError("Source-data authority mismatch");
+  }
+
   async recordTikTokObservation(workspaceId: string, profileId: string, observation: unknown) {
     assertWorkspaceId(workspaceId);
     if (this.providerMode !== "elevenlabs") throw new ConflictError("Mesures simulées interdites pour la production.");
@@ -948,4 +984,12 @@ export class CalibrationApplication {
 
 export function createCalibrationApplication(options: CalibrationApplicationOptions): CalibrationApplication {
   return new CalibrationApplication(options);
+}
+
+function publicReusableProfile(value: unknown): Record<string, unknown> {
+  const keys = ["profileId", "revision", "name", "configuration", "wpm", "predictorDigest", "grantId", "version"];
+  if (!value || typeof value !== "object" || Array.isArray(value)
+      || Object.keys(value).sort().join() !== keys.sort().join()) throw new ConflictError("invalid reuse metadata");
+  // The engine owns validation; this closed projection also rejects accidental source-data disclosure.
+  return Object.fromEntries(keys.map(key => [key, (value as Record<string, unknown>)[key]]));
 }

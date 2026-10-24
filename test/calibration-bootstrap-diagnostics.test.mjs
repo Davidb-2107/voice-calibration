@@ -99,7 +99,8 @@ test("concurrent requests retain separate correlation and credential redaction",
   const api = await startCalibrationUi({
     resolveApplication: async (request) => {
       const index = request.headers.authorization === "Bearer session-0" ? 0 : 1;
-      return { application: apps[index], workspaceId: "local-default" };
+      apps[index].authorizeSourceRead = async () => {};
+      return { application: apps[index], workspaceId: "local-default", identity: { userId: `user-${index}`, tenantId: `tenant-${index}` } };
     },
     closeApplications: async () => { await Promise.all(apps.map((app) => app.close())); },
   });

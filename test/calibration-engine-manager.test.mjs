@@ -304,7 +304,7 @@ test("the same HTTP API handle uses the replacement engine without route changes
   let generation = 0;
   const manager = new EngineManager([{ workspaceId: "a", async create() {
     const current = ++generation;
-    return { async getBootstrap() { return { generation: current }; }, async close() {} };
+    return { async authorizeSourceRead() {}, async getBootstrap() { return { generation: current }; }, async close() {} };
   } }]);
   await manager.start("a");
   const ui = await startCalibrationUi({

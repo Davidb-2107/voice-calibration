@@ -215,6 +215,10 @@ export function fakeBridge(options = {}) {
   };
   return {
     state,
+    async reusableProfiles({ operation, workspaceId, identity }) {
+      if (operation !== "source-read") throw new Error("legacy fixture has no reuse rights");
+      return { authorized: true, mode: "legacy", workspaceId, tenantId: identity.tenantId };
+    },
     async getSchema() { return state.schema; },
     async dryRun(request) {
       state.dryRuns.push(structuredClone(request));

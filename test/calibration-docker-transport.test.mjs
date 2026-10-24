@@ -45,6 +45,26 @@ test('provider journal is writable while its signing key and restore guard remai
   ok(transport.args.includes('--network=none'));
 });
 
+test('scoped source transports dataset identity and independent writable control without changing legacy mounts', () => {
+  const parent = mkdtempSync(join(tmpdir(), 'reuse-source-mount-'));
+  const root = join(parent, 'data');
+  const guard = join(parent, 'independent');
+  const base = { root, tenantId: 'tenant-a', workspaceId: 'workspace-a', image: 'sha256:' + 'a'.repeat(64),
+    wpmPath: join(root, 'corpus/wpm.json'), stateDir: join(root, 'state'), uiWorkspaceDir: join(root, 'ui') };
+  const admission = { projectId: 'project-a', datasetId: 'dataset-a' };
+  throws(() => new DockerMcpStdioTransport({ ...base, datasetAdmission: admission }), /independent restore/);
+  throws(() => new DockerMcpStdioTransport({ ...base, restoreGuardDir: guard, datasetAdmission: null }), /independent restore/);
+  const legacy = new DockerMcpStdioTransport({ ...base, restoreGuardDir: guard });
+  ok(!legacy.args.some(value => value.startsWith('VOICE_CALIBRATION_DATASET_')));
+  const scoped = new DockerMcpStdioTransport({ ...base, restoreGuardDir: guard, datasetAdmission: admission });
+  admission.datasetId = 'tampered';
+  ok(scoped.binding.datasetAdmission.datasetId === 'dataset-a');
+  ok(scoped.args.includes('VOICE_CALIBRATION_DATASET_ADMISSION={"projectId":"project-a","datasetId":"dataset-a"}'));
+  ok(scoped.args.includes('VOICE_CALIBRATION_DATASET_CONTROL_DIR=/dataset-control'));
+  ok(scoped.args.includes(`type=bind,src=${join(guard, 'dataset-control')},dst=/dataset-control`));
+  ok(scoped.args.includes(`type=bind,src=${guard},dst=/restore-control,readonly`));
+});
+
 test('public API refuses an unisolated engine before auth or provider IO', async () => {
   const root = mkdtempSync(join(tmpdir(), 'public-engine-guard-'));
   for (const path of ['ui', 'state', 'corpus']) mkdirSync(join(root, path));

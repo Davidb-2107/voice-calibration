@@ -1,4 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
@@ -84,6 +85,12 @@ export interface ObservationSummary {
   sourceAvailable: boolean;
 }
 export interface CalibrationBridge {
+  reusableProfiles?(input: {
+    workspaceId: string;
+    identity: { userId: string; tenantId: string };
+    operation: "catalog" | "publish" | "revoke" | "source-read";
+    target: string;
+  }): Promise<Record<string, unknown>>;
   publishLiveProfile?(input: { workspaceId: string; runId: string }): Promise<Record<string, unknown>>;
   getLiveProfiles?(workspaceId: string): Promise<Record<string, unknown>>;
   recordTikTokObservation?(input: {
@@ -648,8 +655,48 @@ export function createCalibrationBridge(options: {
     return invokeTool("calibrate_voice", makeRequest(request, dryRun));
   };
 
+  // Engine mode is immutable for this process; never cache mutable source-data permissions.
+  let sourceScope: Promise<TransportCall & { secret: string }> | undefined;
+  let exitListener: (() => void) | undefined;
+  let exited = false;
+  transport.onExit?.(() => { sourceScope = undefined; exited = true; exitListener?.(); });
+
   return {
-    onExit: (listener) => transport.onExit?.(listener),
+    onExit: (listener) => { exitListener = listener; if (exited) listener(); },
+    async reusableProfiles(input) {
+      assertWorkspaceId(input.workspaceId);
+      sourceScope ??= invokeTool("get_reuse_scope", { workspace_id: input.workspaceId }).catch(error => {
+        sourceScope = undefined;
+        throw error;
+      });
+      const handshake = await sourceScope;
+      const scope = resultObject(redact(handshake.response, handshake.secret));
+      if (handshake.remoteError || scope.schema !== "source-access-scope-v1"
+          || scope.workspaceId !== input.workspaceId || scope.tenantId !== input.identity.tenantId)
+        throw new Error("reuse engine scope mismatch");
+      if (scope.mode === "legacy" && input.operation === "source-read") {
+        if (Object.keys(scope).sort().join() !== ["schema", "mode", "tenantId", "workspaceId"].sort().join())
+          throw new Error("invalid legacy engine attestation");
+        return { authorized: true, mode: "legacy", workspaceId: scope.workspaceId, tenantId: scope.tenantId };
+      }
+      if (scope.mode !== "scoped"
+          || Object.keys(scope).sort().join() !== ["schema", "mode", "tenantId", "workspaceId", "projectId", "datasetId", "engineId"].sort().join()
+          || typeof scope.projectId !== "string" || typeof scope.datasetId !== "string" || typeof scope.engineId !== "string")
+        throw new Error("reuse engine scope mismatch");
+      const claims = { tenantId: scope.tenantId, workspaceId: scope.workspaceId, projectId: scope.projectId,
+        datasetId: scope.datasetId, engineId: scope.engineId, userId: input.identity.userId,
+        operation: input.operation, target: input.target, expiresAt: Math.floor(Date.now() / 1000) + 60 };
+      const encoded = JSON.stringify(claims, Object.keys(claims).sort());
+      const signature = createHmac("sha256", handshake.secret).update("voice-profile-reuse-v1\0" + encoded).digest("hex");
+      const tool = { catalog: "get_reusable_profiles", publish: "publish_reusable_profile", revoke: "revoke_reusable_profile",
+        "source-read": "authorize_source_read" }[input.operation];
+      const result = await invokeTool(tool, { workspace_id: input.workspaceId, capability: { claims, signature },
+        ...(input.operation === "publish" ? { run_id: input.target } : {}),
+        ...(input.operation === "source-read" ? { resource: input.target } : {}),
+        ...(input.operation === "revoke" ? { grant_id: input.target } : {}) });
+      if (result.remoteError) throw new Error("reuse operation refused");
+      return resultObject(redact(result.response, result.secret));
+    },
     async publishLiveProfile(input) {
       assertWorkspaceId(input.workspaceId);
       const result = await invokeTool("publish_live_profile", {
@@ -881,7 +928,7 @@ export function createCalibrationBridge(options: {
       }
       return { status: "unknown" };
     },
-    close: () => transport.close(),
+    close: () => { sourceScope = undefined; return transport.close(); },
   };
 }
 

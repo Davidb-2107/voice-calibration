@@ -271,8 +271,26 @@ async function dispatch(
     assertRequestWorkspace(url, undefined, workspaceId);
     if (options.resolveApplication && !url.pathname.startsWith("/api/v1/"))
       throw new HttpError(404, "not_found", "API route not found");
+    const reusePublish = /^\/api\/v1\/calibration-runs\/[^/]+\/reuse-publication$/.test(url.pathname);
+    const reuseRevoke = /^\/api\/v1\/reusable-voice-profiles\/[^/]+\/revoke$/.test(url.pathname);
+    const metadataOnly = url.pathname.startsWith("/api/v1/reusable-voice-profiles") || reusePublish
+      || (method === "GET" && url.pathname === "/api/v1/calibration/schema");
+    let sourceAccess = false;
+    if (options.resolveApplication && !metadataOnly) {
+      if (!selected.identity) throw new HttpError(403, "source_data_forbidden", "Authenticated source identity required");
+      try {
+        await application.authorizeSourceRead(workspaceId, selected.identity, `${method} ${url.pathname}`);
+        sourceAccess = true;
+      } catch {
+        if (!(method === "GET" && url.pathname === "/api/v1/bootstrap"))
+          throw new HttpError(403, "source_data_forbidden", "Explicit project/dataset source-data rights required");
+      }
+    }
     if (method === "GET" && url.pathname === "/api/v1/bootstrap") {
-      const bootstrap = await bootstrapStage("bootstrap", () => application.getBootstrap(workspaceId));
+      const bootstrap = options.resolveApplication && !sourceAccess
+        ? { sessionNonce: application.getSessionNonce(), config: { configured: false }, activeCorpus: null,
+            profiles: [], recentRuns: [] }
+        : await bootstrapStage("bootstrap", () => application.getBootstrap(workspaceId));
       sendJson(
         response,
         200,
@@ -444,6 +462,23 @@ async function dispatch(
       const run = await application.getRun(workspaceId, runId);
       if (!run) throw new NotFoundError("calibration run not found");
       sendJson(response, 200, { ...run, report: await application.getReport(workspaceId, runId) });
+      return;
+    }
+    if ((method === "GET" && url.pathname === "/api/v1/reusable-voice-profiles")
+        || (method === "POST" && (reusePublish || reuseRevoke))) {
+      if (!options.resolveApplication || !selected.identity)
+        throw new HttpError(403, "authenticated_reuse_required", "Authenticated reuse identity required");
+      if ([...url.searchParams.keys()].some(key => key !== "workspaceId"))
+        throw new HttpError(400, "invalid_reuse_scope", "Client reuse scope is forbidden");
+      if (method === "POST") {
+        requireNonce(request, application);
+        const body = await parseBody(request);
+        if (Object.keys(body).length !== 0)
+          throw new HttpError(400, "invalid_reuse_scope", "Publication and revocation accept an empty object only");
+      }
+      const operation = reusePublish ? "publish" : reuseRevoke ? "revoke" : "catalog";
+      const target = operation === "catalog" ? "" : idFromPath(url.pathname);
+      sendJson(response, 200, await application.reusableProfiles(workspaceId, selected.identity, operation, target));
       return;
     }
     if (method === "GET" && url.pathname === "/api/v1/live-voice-profiles") {
