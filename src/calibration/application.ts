@@ -922,6 +922,63 @@ export class CalibrationApplication {
     return { ...catalog, sessionNonce: this.getSessionNonce() };
   }
 
+  async projectVoice(workspaceId: string, identity: { userId: string; tenantId: string },
+    operation: "select" | "readiness" | "predict" | "verify", payload: Record<string, unknown>) {
+    assertWorkspaceId(workspaceId);
+    assertWorkspaceId(identity.userId);
+    assertWorkspaceId(identity.tenantId);
+    if (this.providerMode !== "elevenlabs") throw new ConflictError("Simulation interdite pour la réutilisation productive.");
+    if (!this.bridge.prepareProject) throw new UnavailableError("Project voice unavailable");
+    let result: Record<string, unknown>;
+    try {
+      result = await this.bridge.prepareProject({ workspaceId, identity, operation, payload });
+    } catch {
+      throw new ConflictError("Voix refusée : liaison, droit, révision ou source CUT non admissible.");
+    }
+    const binding = result.binding;
+    const voice = result.voice;
+    const expected = ["binding", "voice", "ready", "productionReady", "observedRuns", "source", "datasetRevision",
+      ...(["predict", "verify"].includes(operation) ? ["receiptId", "seconds", "expiresAt"] : [])];
+    if (!isRecord(binding) || !isRecord(payload.binding)
+        || Object.keys(binding).sort().join() !== Object.keys(payload.binding).sort().join()
+        || Object.keys(binding).some(key => binding[key] !== (payload.binding as Record<string, unknown>)[key])
+        || binding.tenantId !== identity.tenantId || binding.userId !== identity.userId || binding.workspaceId !== workspaceId
+        || Object.keys(result).sort().join() !== expected.sort().join()
+        || result.ready !== true || result.productionReady !== false || !isRecord(result.voice)
+        || !isRecord(result.source) || Object.keys(result.source).sort().join() !== "kind,revision"
+        || !["project", "published"].includes(result.source.kind as string)
+        || typeof result.source.revision !== "string" || !/^sha256:[0-9a-f]{64}$/.test(result.source.revision)
+        || typeof result.datasetRevision !== "string" || !/^sha256:[0-9a-f]{64}$/.test(result.datasetRevision))
+      throw new ConflictError("Project prediction identity mismatch");
+    if (!isRecord(voice) || Object.keys(voice).sort().join() !==
+        "_schema,atempo,calibration_workspace,configuration,corpus,name,profile_revision,reuse_grant,reuse_version,voice_profile"
+        || voice._schema !== "voice-profile-v1" || voice.calibration_workspace !== workspaceId
+        || typeof voice.profile_revision !== "string" || !/^sha256:[0-9a-f]{64}$/.test(voice.profile_revision)
+        || typeof voice.reuse_grant !== "string" || !/^reuse_[0-9a-f]{64}$/.test(voice.reuse_grant)
+        || !["name", "profile_revision", "reuse_grant", "voice_profile"].every(key => typeof voice[key] === "string")
+        || !Number.isInteger(voice.reuse_version) || (voice.reuse_version as number) < 1 || voice.atempo !== 1
+        || !isRecord(voice.corpus) || Object.keys(voice.corpus).sort().join() !== "alias,language,style"
+        || !Object.values(voice.corpus).every(value => typeof value === "string")
+        || !isRecord(voice.configuration) || Object.keys(voice.configuration).sort().join() !==
+          "atempo,cut_protocol,language,model_id,postproc,provider,voice_id,voice_settings"
+        || voice.configuration.provider !== "elevenlabs" || voice.configuration.postproc !== "cut"
+        || voice.configuration.cut_protocol !== "shared-audio-tools-cut-v1"
+        || voice.configuration.language !== voice.corpus.language || voice.configuration.atempo !== voice.atempo
+        || (result.source as Record<string, unknown>).kind === "published"
+          && (result.source as Record<string, unknown>).revision !== voice.profile_revision
+        || !Object.entries(voice.configuration).every(([key, value]) => key === "voice_settings"
+          ? isRecord(value) && Object.keys(value).every(setting =>
+            ["stability", "similarity_boost", "style", "use_speaker_boost", "speed"].includes(setting))
+            && Object.values(value).every(item => typeof item === "boolean" || typeof item === "number" && Number.isFinite(item))
+          : typeof value === "string" || key === "atempo" && value === 1)
+        || !Number.isInteger(result.observedRuns) || (result.observedRuns as number) < 0
+        || ["predict", "verify"].includes(operation) && (typeof result.seconds !== "number"
+          || !Number.isFinite(result.seconds) || result.seconds <= 0 || !Number.isSafeInteger(result.expiresAt)
+          || typeof result.receiptId !== "string" || !/^[0-9a-f]{32}$/.test(result.receiptId)))
+      throw new ConflictError("Invalid project voice metadata");
+    return result;
+  }
+
   async prepareProject(workspaceId: string, identity: { userId: string; tenantId: string },
     operation: "create" | "inspect", payload: Record<string, unknown>) {
     assertWorkspaceId(workspaceId);

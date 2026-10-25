@@ -273,8 +273,9 @@ async function dispatch(
       throw new HttpError(404, "not_found", "API route not found");
     const reusePublish = /^\/api\/v1\/calibration-runs\/[^/]+\/reuse-publication$/.test(url.pathname);
     const reuseRevoke = /^\/api\/v1\/reusable-voice-profiles\/[^/]+\/revoke$/.test(url.pathname);
+    const projectVoice = url.pathname === "/api/v1/projects/voice";
     const preparation = url.pathname === "/api/v1/projects/preparation";
-    const metadataOnly = preparation || url.pathname.startsWith("/api/v1/reusable-voice-profiles") || reusePublish
+    const metadataOnly = projectVoice || preparation || url.pathname.startsWith("/api/v1/reusable-voice-profiles") || reusePublish
       || (method === "GET" && url.pathname === "/api/v1/calibration/schema");
     let sourceAccess = false;
     if (options.resolveApplication && !metadataOnly) {
@@ -286,6 +287,23 @@ async function dispatch(
         if (!(method === "GET" && url.pathname === "/api/v1/bootstrap"))
           throw new HttpError(403, "source_data_forbidden", "Explicit project/dataset source-data rights required");
       }
+    }
+    if (projectVoice && method === "POST") {
+      if (!options.resolveApplication || !selected.identity)
+        throw new HttpError(403, "authenticated_project_required", "Authenticated project required");
+      requireNonce(request, application);
+      const body = await parseBody(request);
+      assertRequestWorkspace(url, body, workspaceId);
+      const { operation, ...payload } = body;
+      if (!["select", "readiness", "predict", "verify"].includes(operation as string))
+        throw new HttpError(400, "invalid_project_operation", "Project operation refused");
+      const expected = operation === "select" ? "binding,profile" : operation === "readiness"
+        ? "binding,voice" : operation === "predict" ? "binding,text,voice" : "binding,receiptId,text,voice";
+      if (Object.keys(payload).sort().join() !== expected)
+        throw new HttpError(400, "invalid_project_scope", "Unexpected project fields");
+      sendJson(response, 200, await application.projectVoice(workspaceId, selected.identity,
+        operation as "select" | "readiness" | "predict" | "verify", payload));
+      return;
     }
     if (preparation && method === "POST") {
       if (!options.resolveApplication || !selected.identity)

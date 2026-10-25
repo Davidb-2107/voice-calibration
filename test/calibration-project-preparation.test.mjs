@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync, readFileSync, rmSync, readdirSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -160,7 +160,8 @@ test('real launcher, authenticated HTTP, bridge and MCP create two private unsel
   assert.deepEqual(JSON.parse(readFileSync(join(projectA, '_project/calibration-connection.json'))).preparation, a);
   assert.equal(hash(join(projectA, '_project/voice.json')), aBefore);
   assert.equal((await create('../escape')).code, 1);
-  assert.equal((await create('Selected', ['--voice-profile', fixture.profileId])).code, 1);
+  const selectedCreation = await create('Selected', ['--voice-profile', fixture.profileId]);
+  assert.equal(selectedCreation.code, 0, selectedCreation.stderr + selectedCreation.stdout);
   for (const boundary of ['intent', 'journal', 'registry', 'pin', 'reread', 'complete']) {
     const name = `Interrupted ${boundary}`;
     const args = ['create', '--account', 'test', '--name', name, '--root', join(root, 'projects'),
@@ -186,17 +187,90 @@ test('real launcher, authenticated HTTP, bridge and MCP create two private unsel
   const concurrent = await Promise.all([create('Concurrent'), create('Concurrent')]);
   for (const result of concurrent) assert.equal(result.code, 0, result.stderr + result.stdout);
   const control = JSON.parse(readFileSync(join(root, 'TEST-authority/registry.json')));
-  assert.equal(control.generation, 11);
-  assert.equal(control.projects.length, 10);
+  assert.equal(control.generation, 12);
+  assert.equal(control.projects.length, 11);
   assert.equal((await call({ operation: 'produce', binding: a })).status, 400);
   assert.equal((await call({ operation: 'inspect', binding: a }, { query: '?workspaceId=foreign' })).status, 400);
+  const voiceCall = (body, { token = 'owner-token', nonce = application.getSessionNonce() } = {}) =>
+    fetch(api.url + '/api/v1/projects/voice', { method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'x-calibration-nonce': nonce },
+      body: JSON.stringify(body) });
+  const sourceForbidden = () => fetch(api.url + '/api/v1/live-voice-profiles', { headers: { authorization: 'Bearer owner-token' } });
+  assert.equal((await sourceForbidden()).status, 403);
+  for (const project of [projectA, projectB]) {
+    const configured = await launch(['configure', '--project-dir', project, '--voice-profile', fixture.profileId]);
+    assert.equal(configured.code, 0, configured.stderr + configured.stdout);
+  }
+  const voiceA = JSON.parse(readFileSync(join(projectA, '_project/voice.json')));
+  const voiceB = JSON.parse(readFileSync(join(projectB, '_project/voice.json')));
+  assert.deepEqual(voiceA, voiceB);
+  const status = await launch(['check', '--project-dir', projectA]);
+  assert.equal(status.code, 0, status.stderr + status.stdout);
+  const readiness = JSON.parse(status.stdout);
+  assert.equal(readiness.ready, true);
+  assert.equal(readiness.productionReady, false);
+  assert.equal(readiness.observedRuns, 0);
+  assert.deepEqual(readiness.voice, voiceA);
+  const projectTransport = bridge.prepareProject;
+  for (const location of ['voice', 'configuration', 'source']) {
+    try {
+      bridge.prepareProject = async input => {
+        const result = await projectTransport(input);
+        const target = location === 'configuration' ? result.voice.configuration : result[location];
+        target.observed_runs = ['private fixture data'];
+        return result;
+      };
+      assert.equal((await voiceCall({ operation: 'readiness', binding: a, voice: voiceA })).status, 409);
+    } finally { bridge.prepareProject = projectTransport; }
+  }
+  const text = 'une narration pour le projet ' .repeat(40);
+  const narration = join(root, 'narration.txt');
+  writeFileSync(narration, text);
+  const predicted = await launch(['predict', '--project-dir', projectA, '--narration', narration]);
+  assert.equal(predicted.code, 0, predicted.stderr + predicted.stdout);
+  const prediction = JSON.parse(predicted.stdout);
+  assert.equal(prediction.source.kind, 'published');
+  assert.equal(prediction.source.revision, voiceA.profile_revision);
+  assert.ok(prediction.seconds > 0);
+  assert.equal(prediction.observedRuns, 0);
+  assert.equal(JSON.stringify(prediction).includes('observed_runs'), false);
+  const verify = { operation: 'verify', binding: a, voice: voiceA, text, receiptId: prediction.receiptId };
+  assert.equal((await voiceCall(verify)).status, 200);
+  assert.equal((await voiceCall({ ...verify, binding: b })).status, 409);
+  assert.equal((await voiceCall({ ...verify, text: text + 'modifié' })).status, 409);
+  assert.equal((await voiceCall(verify, { token: 'member-token' })).status, 409);
+  assert.equal((await voiceCall(verify, { nonce: 'wrong' })).status, 409);
+  assert.equal((await voiceCall(verify, { token: 'invalid' })).status, 401);
+  for (const key of ['projectId', 'datasetId', 'creationId'])
+    assert.equal((await voiceCall({ ...verify, binding: { ...a, [key]: b[key] } })).status, 409);
+  const changedVoice = structuredClone(voiceA);
+  changedVoice.configuration.voice_settings.stability = 0.2;
+  assert.equal((await voiceCall({ ...verify, voice: changedVoice })).status, 409);
+  assert.equal((await sourceForbidden()).status, 403);
+  for (const binding of [a, b]) {
+    const corpus = join(root, 'state/prepared-projects', binding.datasetId, 'voice_wpm.json');
+    assert.deepEqual(JSON.parse(readFileSync(corpus)), {});
+  }
+  assert.equal((await launch(['produce', '--episode', join(projectA, 'outputs/01-pilot')])).code, 1);
+  const defaultBefore = hash(join(projectA, '_project/voice.json'));
+  const noChoice = await launch(['configure', '--project-dir', projectA]);
+  assert.equal(noChoice.code, 1);
+  assert.equal(hash(join(projectA, '_project/voice.json')), defaultBefore);
+  const revokeReuse = await fetch(api.url + `/api/v1/reusable-voice-profiles/${voiceA.reuse_grant}/revoke`, {
+    method: 'POST', headers: { authorization: 'Bearer owner-token', 'content-type': 'application/json',
+      'x-calibration-nonce': application.getSessionNonce() }, body: '{}' });
+  assert.equal(revokeReuse.status, 200);
+  assert.equal((await voiceCall(verify)).status, 409);
+  assert.equal((await launch(['check', '--project-dir', projectA])).code, 1);
   revoked = true;
   assert.equal((await call({ operation: 'inspect', binding: a })).status, 403);
   assert.equal((await call({ operation: 'create', name: 'Revoked' })).status, 403);
   assert.equal(synthesisCalls, 0);
   assert.equal(hash(fixture.corpus), fixture.sha256);
   for (const [path, before] of witnesses) assert.equal(hash(path), before, path);
-  t.diagnostic(JSON.stringify({ projects: [a, b], observedRuns: [0, 0], synthesisCalls,
+  t.diagnostic(JSON.stringify({ ticket: '04', fixtureProvenance: 'synthetic offline CUT; no real catalogue attestation',
+    prediction, defaultReread: true, sameVoiceCrossProjectReceiptRefused: true, sourceReadsRefused: true,
+    projects: [a, b], observedRuns: [0, 0], synthesisCalls,
     recovery: { localIntent: true, firstServerDataset: serverOperation.binding,
       authorityBoundaries: ['journal', 'registry', 'pin', 'reread', 'complete'],
       projects: control.projects.length, generation: control.generation },
