@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { bootstrapRedactor, bootstrapStage } from "./bootstrap-diagnostics.js";
 import type {
   CalibrationBridge,
@@ -923,7 +923,7 @@ export class CalibrationApplication {
   }
 
   async projectVoice(workspaceId: string, identity: { userId: string; tenantId: string },
-    operation: "select" | "readiness" | "predict" | "verify", payload: Record<string, unknown>) {
+    operation: "select" | "readiness" | "predict" | "verify" | "produce", payload: Record<string, unknown>) {
     assertWorkspaceId(workspaceId);
     assertWorkspaceId(identity.userId);
     assertWorkspaceId(identity.tenantId);
@@ -936,9 +936,29 @@ export class CalibrationApplication {
       throw new ConflictError("Voix refusée : liaison, droit, révision ou source CUT non admissible.");
     }
     const binding = result.binding;
+    if (operation === "produce") {
+      if (!isRecord(binding) || !isRecord(payload.binding)
+          || Object.keys(binding).sort().join() !== Object.keys(payload.binding).sort().join()
+          || Object.keys(binding).some(key => binding[key] !== (payload.binding as Record<string, unknown>)[key])
+          || binding.tenantId !== identity.tenantId || binding.userId !== identity.userId || binding.workspaceId !== workspaceId
+          || Object.keys(result).sort().join() !==
+            "audioBase64,audioSha256,binding,datasetRevision,durationCutS,durationRawS,observationId,observedRuns,productionReady,receiptId,synthetic"
+          || result.synthetic !== true || result.productionReady !== false || result.receiptId !== payload.receiptId
+          || typeof result.receiptId !== "string" || !/^[0-9a-f]{32}$/.test(result.receiptId)
+          || result.observationId !== "tiktok:bench:" + result.receiptId
+          || typeof result.audioBase64 !== "string" || !result.audioBase64.length
+          || Buffer.from(result.audioBase64, "base64").toString("base64") !== result.audioBase64
+          || createHash("sha256").update(Buffer.from(result.audioBase64, "base64")).digest("hex") !== result.audioSha256
+          || typeof result.datasetRevision !== "string" || !/^sha256:[0-9a-f]{64}$/.test(result.datasetRevision)
+          || !Number.isSafeInteger(result.observedRuns) || (result.observedRuns as number) < 1
+          || ![result.durationRawS, result.durationCutS].every(value => typeof value === "number" && Number.isFinite(value) && value > 0)
+          || (result.durationCutS as number) > (result.durationRawS as number) + 0.1)
+        throw new ConflictError("Invalid synthetic production evidence");
+      return result;
+    }
     const voice = result.voice;
     const expected = ["binding", "voice", "ready", "productionReady", "observedRuns", "source", "datasetRevision",
-      ...(["predict", "verify"].includes(operation) ? ["receiptId", "seconds", "expiresAt"] : [])];
+      ...(["predict", "verify"].includes(operation) ? ["receiptId", "seconds", "expiresAt", "p25S", "p75S"] : [])];
     if (!isRecord(binding) || !isRecord(payload.binding)
         || Object.keys(binding).sort().join() !== Object.keys(payload.binding).sort().join()
         || Object.keys(binding).some(key => binding[key] !== (payload.binding as Record<string, unknown>)[key])
@@ -974,6 +994,7 @@ export class CalibrationApplication {
         || !Number.isInteger(result.observedRuns) || (result.observedRuns as number) < 0
         || ["predict", "verify"].includes(operation) && (typeof result.seconds !== "number"
           || !Number.isFinite(result.seconds) || result.seconds <= 0 || !Number.isSafeInteger(result.expiresAt)
+          || ![result.p25S, result.p75S].every(value => value === null || typeof value === "number" && Number.isFinite(value) && value > 0)
           || typeof result.receiptId !== "string" || !/^[0-9a-f]{32}$/.test(result.receiptId)))
       throw new ConflictError("Invalid project voice metadata");
     return result;

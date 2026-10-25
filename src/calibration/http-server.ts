@@ -295,14 +295,14 @@ async function dispatch(
       const body = await parseBody(request);
       assertRequestWorkspace(url, body, workspaceId);
       const { operation, ...payload } = body;
-      if (!["select", "readiness", "predict", "verify"].includes(operation as string))
+      if (!["select", "readiness", "predict", "verify", "produce"].includes(operation as string))
         throw new HttpError(400, "invalid_project_operation", "Project operation refused");
       const expected = operation === "select" ? "binding,profile" : operation === "readiness"
         ? "binding,voice" : operation === "predict" ? "binding,text,voice" : "binding,receiptId,text,voice";
       if (Object.keys(payload).sort().join() !== expected)
         throw new HttpError(400, "invalid_project_scope", "Unexpected project fields");
       sendJson(response, 200, await application.projectVoice(workspaceId, selected.identity,
-        operation as "select" | "readiness" | "predict" | "verify", payload));
+        operation as "select" | "readiness" | "predict" | "verify" | "produce", payload));
       return;
     }
     if (preparation && method === "POST") {

@@ -29,7 +29,7 @@ test('application refuses foreign identity or nested private data in preparation
   await assert.rejects(app.prepareProject('test-workspace', identity, 'create', { name: binding.name }), /identity mismatch/);
 });
 
-test('real launcher, authenticated HTTP, bridge and MCP create two private unselected preparations; production never reaches provider', {
+test('real launcher, authenticated HTTP, bridge and MCP isolate production, CUT observations and recovery', {
   skip: !process.env.VOICE_CALIBRATION_TEST_PYTHON || !process.env.VOICE_CALIBRATION_TEST_MCP_ROOT,
 }, async t => {
   const root = mkdtempSync(join(tmpdir(), 'preparation-mcp-'));
@@ -60,7 +60,7 @@ test('real launcher, authenticated HTTP, bridge and MCP create two private unsel
   }
   assert.ok(witnessRoots.length >= 8, 'eight existing project witnesses must be available');
   const transport = new NodeMcpStdioTransport(process.env.VOICE_CALIBRATION_TEST_PYTHON,
-    ['-B', join(engine, 'tests/reusable_engine_fixture.py'), root, 'preparation-cut']);
+    ['-B', join(engine, 'tests/reusable_engine_fixture.py'), root, 'preparation-cut', 'synthetic-production']);
   t.after(async () => { await transport.close(); rmSync(root, { recursive: true, force: true }); });
   await transport.schema('inert-test-secret', 20000);
   const fixture = JSON.parse(readFileSync(join(root, 'fixture-ready.json'), 'utf8'));
@@ -144,7 +144,7 @@ test('real launcher, authenticated HTTP, bridge and MCP create two private unsel
       ['gate', '--episode', join(project, 'outputs/01-pilot')], ['check', '--project-dir', project]]) {
       const result = await launch(args);
       assert.equal(result.code, 1);
-      assert.match(result.stderr, /\[BLOCK\]/);
+      assert.match(result.stderr + result.stdout, /\[BLOCK\]/);
     }
   }
   const inspected = await call({ operation: 'inspect', binding: a });
@@ -256,6 +256,68 @@ test('real launcher, authenticated HTTP, bridge and MCP create two private unsel
   const noChoice = await launch(['configure', '--project-dir', projectA]);
   assert.equal(noChoice.code, 1);
   assert.equal(hash(join(projectA, '_project/voice.json')), defaultBefore);
+  const episode = join(projectA, 'outputs/01-pilot');
+  const productionText = 'mot '.repeat(240).trim();
+  writeFileSync(join(episode, 'narration.txt'), productionText);
+  const providerCalls = join(root, 'synthetic-provider-calls.json');
+  const gatePath = join(projectA, '_gate/gate_2_3.py');
+  writeFileSync(gatePath, `import sys\nfrom pathlib import Path\nepisode = Path(sys.argv[1])\n(episode / 'gate-ran').write_text('real business gate')\nraise SystemExit(1 if (episode / 'DENY').exists() else 0)\n`);
+  writeFileSync(join(episode, 'DENY'), 'business rejection');
+  const blockedGate = await launch(['produce', '--episode', episode]);
+  assert.equal(blockedGate.code, 1, blockedGate.stderr + blockedGate.stdout);
+  assert.equal(existsSync(join(episode, 'gate-ran')), true);
+  assert.equal(existsSync(providerCalls), false);
+  rmSync(join(episode, 'DENY'));
+  const firstAttempt = await launch(['produce', '--episode', episode]);
+  assert.equal(firstAttempt.code, 1, 'lost measurement response must remain visible');
+  assert.equal(JSON.parse(readFileSync(providerCalls)).length, 1);
+  const productionPending = JSON.parse(readFileSync(join(episode, 'audio/project-production.json')));
+  const corpusA = join(root, 'state/prepared-projects', a.datasetId, 'voice_wpm.json');
+  const corpusB = join(root, 'state/prepared-projects', b.datasetId, 'voice_wpm.json');
+  assert.deepEqual(JSON.parse(readFileSync(corpusA)), {}, 'measurement loss precedes admission');
+  const crossProduction = { operation: 'produce', ...productionPending, binding: b };
+  assert.equal((await voiceCall(crossProduction)).status, 409, 'valid digest for B cannot use receipt A');
+  let lostAdmission = false;
+  try {
+    bridge.prepareProject = async input => {
+      const result = await projectTransport(input);
+      if (input.operation === 'produce' && !lostAdmission) { lostAdmission = true; throw new Error('lost admission response'); }
+      return result;
+    };
+    assert.equal((await launch(['produce', '--episode', episode])).code, 1);
+  } finally { bridge.prepareProject = projectTransport; }
+  assert.equal(lostAdmission, true);
+  const admittedHash = hash(corpusA);
+  const resumedProduction = await launch(['produce', '--episode', episode]);
+  assert.equal(resumedProduction.code, 0, resumedProduction.stderr + resumedProduction.stdout);
+  const production = JSON.parse(readFileSync(join(episode, 'audio.json')));
+  assert.equal(production.synthetic, true);
+  assert.equal(production.productionReady, false);
+  assert.equal(production.postproc, 'cut');
+  assert.equal(production.durationCutS < production.durationRawS, true, 'real CUT removes synthetic silence');
+  assert.equal(hash(join(episode, 'audio/narration.mp3')), production.audioSha256);
+  assert.equal(hash(corpusA), admittedHash, 'lost admission response must not append or revise');
+  const repeated = await launch(['produce', '--episode', episode]);
+  assert.equal(repeated.code, 0, repeated.stderr + repeated.stdout);
+  assert.equal(hash(corpusA), admittedHash);
+  const emissions = JSON.parse(readFileSync(providerCalls));
+  assert.equal(emissions.length, 1);
+  const networkProof = JSON.parse(readFileSync(join(root, 'synthetic-network-proof.json')));
+  assert.equal(networkProof.realProviderAttempts, 0);
+  assert.equal(networkProof.externalDestinationDenied, true);
+  assert.deepEqual(emissions[0].dataset, { projectId: a.projectId, datasetId: a.datasetId });
+  assert.equal(emissions[0].voiceId, voiceA.configuration.voice_id);
+  assert.equal(emissions[0].modelId, voiceA.configuration.model_id);
+  assert.deepEqual(emissions[0].settings, voiceA.configuration.voice_settings);
+  assert.deepEqual(JSON.parse(readFileSync(corpusB)), {});
+  const bReady = await launch(['check', '--project-dir', projectB]);
+  assert.equal(bReady.code, 0, bReady.stderr + bReady.stdout);
+  assert.equal(JSON.parse(bReady.stdout).source.kind, 'published');
+  assert.equal(JSON.parse(bReady.stdout).observedRuns, 0);
+  const aReady = await launch(['check', '--project-dir', projectA]);
+  assert.equal(aReady.code, 0, aReady.stderr + aReady.stdout);
+  assert.equal(JSON.parse(aReady.stdout).source.kind, 'project');
+  assert.equal(JSON.parse(aReady.stdout).observedRuns, 1);
   const revokeReuse = await fetch(api.url + `/api/v1/reusable-voice-profiles/${voiceA.reuse_grant}/revoke`, {
     method: 'POST', headers: { authorization: 'Bearer owner-token', 'content-type': 'application/json',
       'x-calibration-nonce': application.getSessionNonce() }, body: '{}' });
@@ -268,9 +330,12 @@ test('real launcher, authenticated HTTP, bridge and MCP create two private unsel
   assert.equal(synthesisCalls, 0);
   assert.equal(hash(fixture.corpus), fixture.sha256);
   for (const [path, before] of witnesses) assert.equal(hash(path), before, path);
-  t.diagnostic(JSON.stringify({ ticket: '04', fixtureProvenance: 'synthetic offline CUT; no real catalogue attestation',
+  t.diagnostic(JSON.stringify({ ticket: '05', fixtureProvenance: 'synthetic provider audio; real CUT; no real catalogue attestation',
     prediction, defaultReread: true, sameVoiceCrossProjectReceiptRefused: true, sourceReadsRefused: true,
-    projects: [a, b], observedRuns: [0, 0], synthesisCalls,
+    projects: [a, b], observedRuns: [1, 0], synthesisCalls, providerCalls: emissions.length,
+    production, networkProof, lostMeasurementResponseRecovered: true, lostAdmissionResponseRecovered: true,
+    datasetAfterAdmission: admittedHash, datasetAfterReplay: hash(corpusA),
+    datasetRevisionBefore: prediction.datasetRevision, datasetRevisionAfter: production.datasetRevision,
     recovery: { localIntent: true, firstServerDataset: serverOperation.binding,
       authorityBoundaries: ['journal', 'registry', 'pin', 'reread', 'complete'],
       projects: control.projects.length, generation: control.generation },
