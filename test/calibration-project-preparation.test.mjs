@@ -60,7 +60,7 @@ test('real launcher, authenticated HTTP, bridge and MCP create two private unsel
   }
   assert.ok(witnessRoots.length >= 8, 'eight existing project witnesses must be available');
   const transport = new NodeMcpStdioTransport(process.env.VOICE_CALIBRATION_TEST_PYTHON,
-    ['-B', join(engine, 'tests/reusable_engine_fixture.py'), root]);
+    ['-B', join(engine, 'tests/reusable_engine_fixture.py'), root, 'preparation-cut']);
   t.after(async () => { await transport.close(); rmSync(root, { recursive: true, force: true }); });
   await transport.schema('inert-test-secret', 20000);
   const fixture = JSON.parse(readFileSync(join(root, 'fixture-ready.json'), 'utf8'));
@@ -108,6 +108,19 @@ test('real launcher, authenticated HTTP, bridge and MCP create two private unsel
     assert.equal((await call({ operation: 'create', name: 'Forged', [key]: 'foreign' })).status, 400);
   const create = (name, extra = []) => launch(['create', '--account', 'test', '--name', name, '--root', join(root, 'projects'),
     '--project-type', 'preparation_fixture', '--slug', 'pilot', ...extra]);
+  const interruptedServer = await create('Server recovered');
+  assert.equal(interruptedServer.code, 1);
+  const operationsFolder = join(root, 'state/preparation-control/creation-operations');
+  const operations = readdirSync(operationsFolder).filter(file => file.endsWith('.json'));
+  assert.equal(operations.length, 1);
+  const serverOperation = JSON.parse(readFileSync(join(operationsFolder, operations[0])));
+  assert.equal(serverOperation.state, 'pending');
+  assert.equal(existsSync(join(root, 'state/preparation-control/registry.json')), false);
+  const serverResumed = await create('Server recovered');
+  assert.equal(serverResumed.code, 0, serverResumed.stderr + serverResumed.stdout);
+  assert.deepEqual(JSON.parse(readFileSync(join(root, 'projects/Server recovered/_project/calibration-connection.json'))).preparation,
+    serverOperation.binding);
+  assert.equal(JSON.parse(readFileSync(join(operationsFolder, operations[0]))).state, 'complete');
   const publication = await fetch(api.url + `/api/v1/calibration-runs/${fixture.runId}/reuse-publication`, {
     method: 'POST', headers: { authorization: 'Bearer owner-token', 'content-type': 'application/json',
       'x-calibration-nonce': application.getSessionNonce() }, body: '{}' });
@@ -148,22 +161,33 @@ test('real launcher, authenticated HTTP, bridge and MCP create two private unsel
   assert.equal(hash(join(projectA, '_project/voice.json')), aBefore);
   assert.equal((await create('../escape')).code, 1);
   assert.equal((await create('Selected', ['--voice-profile', fixture.profileId])).code, 1);
-  for (const boundary of ['journal', 'registry', 'pin', 'reread', 'complete']) {
+  for (const boundary of ['intent', 'journal', 'registry', 'pin', 'reread', 'complete']) {
     const name = `Interrupted ${boundary}`;
     const args = ['create', '--account', 'test', '--name', name, '--root', join(root, 'projects'),
       '--project-type', 'preparation_fixture', '--slug', 'pilot'];
     const cut = await launch(args, 'reusable_launcher_fixture.py', { VOICE_CALIBRATION_TEST_CUT: boundary });
     assert.equal(cut.code, 1, boundary + cut.stderr);
-    const saved = readFileSync(join(root, 'projects', name, '_project/calibration-connection.json'), 'utf8');
+    const connection = join(root, 'projects', name, '_project/calibration-connection.json');
+    const saved = existsSync(connection) ? readFileSync(connection, 'utf8') : null;
+    if (boundary === 'intent') assert.equal(existsSync(join(root, 'projects', name)), false);
+    const intentFolder = join(root, 'TEST-authority/creation-intents');
+    const intent = readdirSync(intentFolder).filter(file => file.endsWith('.json'))
+      .map(file => JSON.parse(readFileSync(join(intentFolder, file))))
+      .find(value => value.request.name === name).creation;
     const resumed = await launch(args);
     assert.equal(resumed.code, 0, boundary + resumed.stderr + resumed.stdout);
-    assert.equal(readFileSync(join(root, 'projects', name, '_project/calibration-connection.json'), 'utf8'), saved);
+    if (saved !== null) assert.equal(readFileSync(connection, 'utf8'), saved);
+    const inspected = await call({ operation: 'inspect', operationId: intent.operationId });
+    assert.equal(inspected.status, 200);
+    const receipt = await inspected.json();
+    assert.deepEqual(receipt.creation, intent);
+    assert.deepEqual(receipt.binding, JSON.parse(readFileSync(connection)).preparation);
   }
   const concurrent = await Promise.all([create('Concurrent'), create('Concurrent')]);
   for (const result of concurrent) assert.equal(result.code, 0, result.stderr + result.stdout);
   const control = JSON.parse(readFileSync(join(root, 'TEST-authority/registry.json')));
-  assert.equal(control.generation, 9);
-  assert.equal(control.projects.length, 8);
+  assert.equal(control.generation, 11);
+  assert.equal(control.projects.length, 10);
   assert.equal((await call({ operation: 'produce', binding: a })).status, 400);
   assert.equal((await call({ operation: 'inspect', binding: a }, { query: '?workspaceId=foreign' })).status, 400);
   revoked = true;
@@ -173,6 +197,9 @@ test('real launcher, authenticated HTTP, bridge and MCP create two private unsel
   assert.equal(hash(fixture.corpus), fixture.sha256);
   for (const [path, before] of witnesses) assert.equal(hash(path), before, path);
   t.diagnostic(JSON.stringify({ projects: [a, b], observedRuns: [0, 0], synthesisCalls,
+    recovery: { localIntent: true, firstServerDataset: serverOperation.binding,
+      authorityBoundaries: ['journal', 'registry', 'pin', 'reread', 'complete'],
+      projects: control.projects.length, generation: control.generation },
     sameSessionWithExplicitSelection: true, sourceBefore: fixture.sha256, sourceAfter: hash(fixture.corpus),
     witnesses: [...witnesses].map(([path, before]) => ({ path, before, after: hash(path) })) }));
 });
