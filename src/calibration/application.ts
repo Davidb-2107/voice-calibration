@@ -922,6 +922,75 @@ export class CalibrationApplication {
     return { ...catalog, sessionNonce: this.getSessionNonce() };
   }
 
+  async projectCalibration(workspaceId: string, identity: { userId: string; tenantId: string },
+    action: "propose" | "inspect" | "approve" | "decline" | "execute" | "publish" | "reconcile", payload: Record<string, unknown>) {
+    assertWorkspaceId(workspaceId);
+    assertWorkspaceId(identity.userId);
+    assertWorkspaceId(identity.tenantId);
+    if (!this.providerMode || !this.bridge.prepareProject) throw new UnavailableError("Calibration provider mode required");
+    const binding = payload.binding;
+    if (!isRecord(binding) || binding.userId !== identity.userId || binding.tenantId !== identity.tenantId
+        || binding.workspaceId !== workspaceId) throw new ConflictError("Calibration binding refused");
+    let result: Record<string, unknown>;
+    try {
+      result = await this.bridge.prepareProject({ workspaceId, identity, operation: `calibration-${action}`,
+        payload: { ...payload, providerMode: this.providerMode } });
+    } catch {
+      throw new ConflictError("Calibrage refusé : portée, proposition ou accord invalide ; inspectez l’opération, aucune relance automatique.");
+    }
+    const same = (a: unknown, b: unknown): boolean => JSON.stringify(a, (_key, item) =>
+      isRecord(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item)
+      === JSON.stringify(b, (_key, item) => isRecord(item)
+        ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
+    const snapshot = result.snapshot;
+    const request = result.request;
+    const settings = isRecord(request) ? request.voice_settings : null;
+    const text = isRecord(request) ? request.text_source : null;
+    if (Object.keys(result).sort().join() !==
+          "approval,binding,configurationIdentity,estimate,productionReady,providerMode,request,requestDigest,result,runId,schema,snapshot,status,warning"
+        || result.schema !== "project-calibration-v1" || !same(result.binding, binding)
+        || result.providerMode !== this.providerMode || result.productionReady !== false
+        || typeof result.runId !== "string" || !/^[0-9a-f-]{36}$/.test(result.runId)
+        || typeof result.requestDigest !== "string" || !/^v1:sha256:[0-9a-f]{64}$/.test(result.requestDigest)
+        || !["dry_run_ready", "approved", "running", "succeeded", "failed", "execution_unknown"].includes(result.status as string)
+        || result.configurationIdentity !== null && (typeof result.configurationIdentity !== "string"
+          || !/^v1:hmac-sha256:[0-9a-f]{64}$/.test(result.configurationIdentity))
+        || !isRecord(snapshot) || Object.keys(snapshot).sort().join() !==
+          "binding,contractDigest,coreDigest,datasetRevision,engine,live_provider_mode,predictorDigest,request,rightsRevision,selectionRevision,synthetic"
+        || !same(snapshot.binding, binding) || !same(snapshot.request, result.request)
+        || !["contractDigest", "coreDigest", "datasetRevision", "predictorDigest", "rightsRevision"].every(key =>
+          typeof snapshot[key] === "string" && /^[0-9a-f]{64}$/.test(snapshot[key] as string))
+        || snapshot.selectionRevision !== null && (typeof snapshot.selectionRevision !== "string"
+          || !/^[0-9a-f]{64}$/.test(snapshot.selectionRevision))
+        || snapshot.live_provider_mode !== this.providerMode || typeof snapshot.synthetic !== "boolean"
+        || !isRecord(snapshot.engine) || Object.keys(snapshot.engine).sort().join() !== "engineId,tenantId,workspaceId"
+        || snapshot.engine.tenantId !== identity.tenantId || snapshot.engine.workspaceId !== workspaceId
+        || typeof snapshot.engine.engineId !== "string" || !/^[0-9a-f]{64}$/.test(snapshot.engine.engineId)
+        || !isRecord(request) || Object.keys(request).sort().join() !==
+          "corpus_key,dry_run,language,mode,model_id,postproc,runs,text_source,voice,voice_id,voice_settings"
+        || request.dry_run !== false || request.postproc !== "cut"
+        || !["corpus_key", "language", "mode", "model_id", "voice", "voice_id"].every(key => typeof request[key] === "string")
+        || request.runs !== null && !Number.isInteger(request.runs)
+        || !isRecord(settings) || Object.keys(settings).sort().join() !== "similarity_boost,speed,stability,style,use_speaker_boost"
+        || !Object.values(settings).every(value => value === null || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value))
+        || !isRecord(text) || Object.keys(text).sort().join() !== "artifact_id,kind,text"
+        || text.artifact_id !== null || text.kind !== "inline" || typeof text.text !== "string"
+        || result.warning !== "Une synthèse réelle peut consommer des crédits. Aucun appel payant ne sera lancé sans votre accord explicite."
+        || !isRecord(result.estimate) || Object.keys(result.estimate).sort().join() !==
+          "billable_characters,cost_basis,estimated_cost_usd,estimated_credits,requests_planned"
+        || !Object.entries(result.estimate).every(([key, value]) => value === null || (key === "cost_basis"
+          ? typeof value === "string" : typeof value === "number" && Number.isFinite(value) && value >= 0))
+        || result.approval !== null && (!isRecord(result.approval) || Object.keys(result.approval).sort().join() !==
+          "approved_at,consumed_at,expires_at" || !Object.entries(result.approval).every(([key, value]) =>
+            key === "consumed_at" && value === null || typeof value === "string" && Number.isFinite(Date.parse(value))))
+        || result.result !== null && (!isRecord(result.result) || Object.keys(result.result).sort().join() !==
+          "diagnostic,executionAllowed,simulated,status,synthetic" || result.result.executionAllowed !== false
+          || result.result.simulated !== (this.providerMode === "simulated") || typeof result.result.synthetic !== "boolean"
+          || typeof result.result.status !== "string" || typeof result.result.diagnostic !== "string"))
+      throw new ConflictError("Calibration metadata identity mismatch");
+    return result;
+  }
+
   async projectVoice(workspaceId: string, identity: { userId: string; tenantId: string },
     operation: "select" | "readiness" | "predict" | "verify" | "produce", payload: Record<string, unknown>) {
     assertWorkspaceId(workspaceId);

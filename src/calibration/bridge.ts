@@ -88,7 +88,8 @@ export interface CalibrationBridge {
   prepareProject?(input: {
     workspaceId: string;
     identity: { userId: string; tenantId: string };
-    operation: "create" | "inspect" | "select" | "readiness" | "predict" | "verify" | "produce";
+    operation: "create" | "inspect" | "select" | "readiness" | "predict" | "verify" | "produce"
+      | `calibration-${"propose" | "inspect" | "approve" | "decline" | "execute" | "publish" | "reconcile"}`;
     payload: Record<string, unknown>;
   }): Promise<Record<string, unknown>>;
   reusableProfiles?(input: {

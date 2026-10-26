@@ -274,8 +274,9 @@ async function dispatch(
     const reusePublish = /^\/api\/v1\/calibration-runs\/[^/]+\/reuse-publication$/.test(url.pathname);
     const reuseRevoke = /^\/api\/v1\/reusable-voice-profiles\/[^/]+\/revoke$/.test(url.pathname);
     const projectVoice = url.pathname === "/api/v1/projects/voice";
+    const projectCalibration = url.pathname === "/api/v1/projects/calibration";
     const preparation = url.pathname === "/api/v1/projects/preparation";
-    const metadataOnly = projectVoice || preparation || url.pathname.startsWith("/api/v1/reusable-voice-profiles") || reusePublish
+    const metadataOnly = projectCalibration || projectVoice || preparation || url.pathname.startsWith("/api/v1/reusable-voice-profiles") || reusePublish
       || (method === "GET" && url.pathname === "/api/v1/calibration/schema");
     let sourceAccess = false;
     if (options.resolveApplication && !metadataOnly) {
@@ -287,6 +288,24 @@ async function dispatch(
         if (!(method === "GET" && url.pathname === "/api/v1/bootstrap"))
           throw new HttpError(403, "source_data_forbidden", "Explicit project/dataset source-data rights required");
       }
+    }
+    if (projectCalibration && method === "POST") {
+      if (!options.resolveApplication || !selected.identity)
+        throw new HttpError(403, "authenticated_project_required", "Authenticated project required");
+      requireNonce(request, application);
+      const body = await parseBody(request);
+      assertRequestWorkspace(url, body, workspaceId);
+      const { action, ...payload } = body;
+      if (!["propose", "inspect", "approve", "decline", "execute", "publish", "reconcile"].includes(action as string))
+        throw new HttpError(400, "invalid_calibration_action", "Calibration action refused");
+      const expected = action === "propose" ? "binding,request" : action === "approve"
+        ? "agreement,binding,request,requestDigest,runId" : action === "decline"
+          ? "binding,decision,request,requestDigest,runId" : "binding,request,requestDigest,runId";
+      if (Object.keys(payload).sort().join() !== expected)
+        throw new HttpError(400, "invalid_calibration_scope", "Unexpected calibration fields");
+      sendJson(response, 200, await application.projectCalibration(workspaceId, selected.identity,
+        action as "propose" | "inspect" | "approve" | "decline" | "execute" | "publish" | "reconcile", payload));
+      return;
     }
     if (projectVoice && method === "POST") {
       if (!options.resolveApplication || !selected.identity)
