@@ -936,12 +936,13 @@ export class CalibrationApplication {
       throw new ConflictError("Voix refusée : liaison, droit, révision ou source CUT non admissible.");
     }
     const binding = result.binding;
+    if (!isRecord(binding) || !isRecord(payload.binding)
+        || Object.keys(binding).sort().join() !== Object.keys(payload.binding).sort().join()
+        || Object.keys(binding).some(key => binding[key] !== (payload.binding as Record<string, unknown>)[key])
+        || binding.tenantId !== identity.tenantId || binding.userId !== identity.userId || binding.workspaceId !== workspaceId)
+      throw new ConflictError(operation === "produce" ? "Invalid synthetic production evidence" : "Project prediction identity mismatch");
     if (operation === "produce") {
-      if (!isRecord(binding) || !isRecord(payload.binding)
-          || Object.keys(binding).sort().join() !== Object.keys(payload.binding).sort().join()
-          || Object.keys(binding).some(key => binding[key] !== (payload.binding as Record<string, unknown>)[key])
-          || binding.tenantId !== identity.tenantId || binding.userId !== identity.userId || binding.workspaceId !== workspaceId
-          || Object.keys(result).sort().join() !==
+      if (Object.keys(result).sort().join() !==
             "audioBase64,audioSha256,binding,datasetRevision,durationCutS,durationRawS,observationId,observedRuns,productionReady,receiptId,synthetic"
           || result.synthetic !== true || result.productionReady !== false || result.receiptId !== payload.receiptId
           || typeof result.receiptId !== "string" || !/^[0-9a-f]{32}$/.test(result.receiptId)
@@ -959,11 +960,7 @@ export class CalibrationApplication {
     const voice = result.voice;
     const expected = ["binding", "voice", "ready", "productionReady", "observedRuns", "source", "datasetRevision",
       ...(["predict", "verify"].includes(operation) ? ["receiptId", "seconds", "expiresAt", "p25S", "p75S"] : [])];
-    if (!isRecord(binding) || !isRecord(payload.binding)
-        || Object.keys(binding).sort().join() !== Object.keys(payload.binding).sort().join()
-        || Object.keys(binding).some(key => binding[key] !== (payload.binding as Record<string, unknown>)[key])
-        || binding.tenantId !== identity.tenantId || binding.userId !== identity.userId || binding.workspaceId !== workspaceId
-        || Object.keys(result).sort().join() !== expected.sort().join()
+    if (Object.keys(result).sort().join() !== expected.sort().join()
         || result.ready !== true || result.productionReady !== false || !isRecord(result.voice)
         || !isRecord(result.source) || Object.keys(result.source).sort().join() !== "kind,revision"
         || !["project", "published"].includes(result.source.kind as string)
