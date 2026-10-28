@@ -110,6 +110,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function validSpending(value: unknown, operation: "calibration" | "production"): value is Record<string,unknown> {
+  if (!isRecord(value) || Object.keys(value).sort().join() !==
+      "budgetId,confirmedCredits,currency,expiresAt,maxCalls,maxCharacters,maxCredits,maxUsdMicros,operation,priceEvidenceSha256,reserved,specSha256,uncertainAttempts"
+      || value.operation !== operation || value.currency !== "USD"
+      || typeof value.budgetId !== "string" || !/^budget_[0-9a-f]{32}$/.test(value.budgetId)
+      || ![value.specSha256,value.priceEvidenceSha256].every(v => typeof v === "string" && /^[0-9a-f]{64}$/.test(v))
+      || ![value.maxCalls,value.maxCharacters,value.maxCredits,value.maxUsdMicros,value.expiresAt].every(v => Number.isSafeInteger(v) && (v as number) > 0)
+      || ![value.confirmedCredits,value.uncertainAttempts].every(v => Number.isSafeInteger(v) && (v as number) >= 0)
+      || !isRecord(value.reserved) || Object.keys(value.reserved).sort().join() !== "calls,characters,credits,usdMicros") return false;
+  return Object.entries(value.reserved).every(([k,v]) => Number.isSafeInteger(v) && (v as number) >= 0
+    && (v as number) <= (value["max"+k[0].toUpperCase()+k.slice(1)] as number));
+}
+
 function languageFromParams(params: Record<string, unknown>): "fr" | "en" {
   return params.language === "en" ? "en" : "fr";
 }
@@ -947,7 +960,8 @@ export class CalibrationApplication {
     const settings = isRecord(request) ? request.voice_settings : null;
     const text = isRecord(request) ? request.text_source : null;
     if (Object.keys(result).sort().join() !==
-          "approval,binding,configurationIdentity,estimate,productionReady,providerMode,request,requestDigest,result,runId,schema,snapshot,status,warning"
+          ("approval,binding,configurationIdentity,estimate,productionReady,providerMode,request,requestDigest,result,runId,schema,snapshot,status,warning"
+            +(Object.hasOwn(result,"spending") ? ",spending" : "")).split(",").sort().join()
         || result.schema !== "project-calibration-v1" || !same(result.binding, binding)
         || result.providerMode !== this.providerMode || result.productionReady !== false
         || typeof result.runId !== "string" || !/^[0-9a-f-]{36}$/.test(result.runId)
@@ -956,7 +970,12 @@ export class CalibrationApplication {
         || result.configurationIdentity !== null && (typeof result.configurationIdentity !== "string"
           || !/^v1:hmac-sha256:[0-9a-f]{64}$/.test(result.configurationIdentity))
         || !isRecord(snapshot) || Object.keys(snapshot).sort().join() !==
-          "binding,contractDigest,coreDigest,datasetRevision,engine,live_provider_mode,predictorDigest,request,rightsRevision,selectionRevision,synthetic"
+          ["binding","contractDigest","coreDigest","datasetRevision","engine","live_provider_mode","predictorDigest","request","rightsRevision","selectionRevision","synthetic",
+            ...(Object.hasOwn(snapshot,"executionBudget") ? ["executionBudget"] : [])].sort().join()
+        || Object.hasOwn(snapshot,"executionBudget") && (!isRecord(snapshot.executionBudget)
+          || Object.keys(snapshot.executionBudget).sort().join() !== "budgetId,specSha256"
+          || typeof snapshot.executionBudget.budgetId !== "string" || !/^budget_[0-9a-f]{32}$/.test(snapshot.executionBudget.budgetId)
+          || typeof snapshot.executionBudget.specSha256 !== "string" || !/^[0-9a-f]{64}$/.test(snapshot.executionBudget.specSha256))
         || !same(snapshot.binding, binding) || !same(snapshot.request, result.request)
         || !["contractDigest", "coreDigest", "datasetRevision", "predictorDigest", "rightsRevision"].every(key =>
           typeof snapshot[key] === "string" && /^[0-9a-f]{64}$/.test(snapshot[key] as string))
@@ -988,6 +1007,92 @@ export class CalibrationApplication {
           || result.result.simulated !== (this.providerMode === "simulated") || typeof result.result.synthetic !== "boolean"
           || typeof result.result.status !== "string" || typeof result.result.diagnostic !== "string"))
       throw new ConflictError("Calibration metadata identity mismatch");
+    if (Object.hasOwn(result,"spending") !== Object.hasOwn(snapshot,"executionBudget")
+        || Object.hasOwn(result,"spending") && (!validSpending(result.spending,"calibration")
+          || !isRecord(snapshot.executionBudget) || result.spending.budgetId !== snapshot.executionBudget.budgetId
+          || result.spending.specSha256 !== snapshot.executionBudget.specSha256))
+      throw new ConflictError("Invalid calibration spending evidence");
+    return result;
+  }
+
+  async projectProduction(workspaceId: string, identity: { userId: string; tenantId: string },
+    action: "propose" | "inspect" | "approve" | "decline" | "execute" | "reconcile", payload: Record<string, unknown>) {
+    assertWorkspaceId(workspaceId);
+    assertWorkspaceId(identity.userId);
+    assertWorkspaceId(identity.tenantId);
+    if (this.providerMode !== "elevenlabs" || !this.bridge.prepareProject)
+      throw new ConflictError("Real production unavailable");
+    const same = (a: unknown,b: unknown): boolean => JSON.stringify(a,(_k,v) => isRecord(v)
+      ? Object.fromEntries(Object.entries(v).sort(([a],[b]) => a.localeCompare(b))) : v)
+      === JSON.stringify(b,(_k,v) => isRecord(v) ? Object.fromEntries(Object.entries(v).sort(([a],[b]) => a.localeCompare(b))) : v);
+    const binding = payload.binding;
+    if (!isRecord(binding) || binding.userId !== identity.userId || binding.tenantId !== identity.tenantId
+        || binding.workspaceId !== workspaceId || typeof payload.text !== "string" || !isRecord(payload.voice))
+      throw new ConflictError("Production binding refused");
+    let result: Record<string,unknown>;
+    try {
+      result = await this.bridge.prepareProject({workspaceId,identity,operation:`production-${action}`,payload});
+    } catch {
+      throw new ConflictError("Production refused: consent, verified budget or receipt unavailable; no automatic retry");
+    }
+    const estimate = result.estimate;
+    const budget = isRecord(estimate) ? estimate.budget : undefined;
+    if (Object.keys(result).sort().join() !== "approval,binding,estimate,production,productionReady,requestDigest,runId,schema,spending,status,warning"
+        || result.schema !== "project-production-consent-v2" || !same(result.binding,binding) || result.productionReady !== false
+        || typeof result.runId !== "string" || !/^[0-9a-f-]{36}$/.test(result.runId)
+        || typeof result.requestDigest !== "string" || !/^v1:sha256:[0-9a-f]{64}$/.test(result.requestDigest)
+        || action !== "propose" && (result.runId !== payload.runId || result.requestDigest !== payload.requestDigest)
+        || !["dry_run_ready","approved","running","succeeded","failed","execution_unknown"].includes(result.status as string)
+        || result.warning !== "Production réelle payante : accord distinct du calibrage requis ; aucune relance automatique."
+        || !isRecord(estimate) || Object.keys(estimate).sort().join() !== "billable_characters,budget,maximum_credits,maximum_usd_micros,requests_planned,status"
+        || estimate.status !== "dry_run_success" || estimate.requests_planned !== 1
+        || estimate.billable_characters !== [...payload.text].length
+        || ![estimate.maximum_credits,estimate.maximum_usd_micros].every(v => Number.isSafeInteger(v) && (v as number) > 0)
+        || !isRecord(budget) || Object.keys(budget).sort().join() !== "budgetId,specSha256"
+        || typeof budget.budgetId !== "string" || !/^budget_[0-9a-f]{32}$/.test(budget.budgetId)
+        || typeof budget.specSha256 !== "string" || !/^[0-9a-f]{64}$/.test(budget.specSha256)
+        || !validSpending(result.spending,"production") || result.spending.budgetId !== budget.budgetId
+        || result.spending.specSha256 !== budget.specSha256
+        || result.approval !== null && (!isRecord(result.approval) || Object.keys(result.approval).sort().join() !== "approved_at,consumed_at,expires_at"
+          || !Object.entries(result.approval).every(([k,v]) => k === "consumed_at" && v === null || typeof v === "string" && Number.isFinite(Date.parse(v)))))
+      throw new ConflictError("Invalid real production consent metadata");
+    if (result.production !== null) {
+      const produced = result.production;
+      const receipt = isRecord(produced) ? produced.productionReceipt : undefined;
+      const claims = isRecord(receipt) ? receipt.claims : undefined;
+      const profile = isRecord(claims) ? claims.profile : undefined;
+      const consent = isRecord(claims) ? claims.consent : undefined;
+      const voice = payload.voice;
+      if (result.status !== "succeeded" || !["execute","reconcile"].includes(action)
+          || !isRecord(produced) || Object.keys(produced).sort().join() !==
+            "audioBase64,audioSha256,binding,datasetRevision,durationCutS,durationRawS,observationId,observedRuns,productionObservations,productionReady,productionReceipt,receiptId,synthetic"
+          || !same(produced.binding,binding) || produced.synthetic !== false || produced.productionReady !== false
+          || produced.receiptId !== payload.receiptId || produced.observationId !== "tiktok:production:"+payload.receiptId
+          || !Number.isSafeInteger(produced.observedRuns) || (produced.observedRuns as number) < 1
+          || !Number.isSafeInteger(produced.productionObservations) || (produced.productionObservations as number) < 1
+          || typeof produced.audioBase64 !== "string" || !produced.audioBase64
+          || Buffer.from(produced.audioBase64,"base64").toString("base64") !== produced.audioBase64
+          || createHash("sha256").update(Buffer.from(produced.audioBase64,"base64")).digest("hex") !== produced.audioSha256
+          || typeof produced.datasetRevision !== "string" || !/^sha256:[0-9a-f]{64}$/.test(produced.datasetRevision)
+          || ![produced.durationRawS,produced.durationCutS].every(v => typeof v === "number" && Number.isFinite(v) && v > 0)
+          || (produced.durationCutS as number) > (produced.durationRawS as number)+0.1
+          || !isRecord(receipt) || Object.keys(receipt).sort().join() !== "claims,signature"
+          || typeof receipt.signature !== "string" || !/^[0-9a-f]{64}$/.test(receipt.signature)
+          || !isRecord(claims) || claims.schema !== "project-production-v2" || !same(claims.binding,binding)
+          || claims.userId !== identity.userId || claims.tenantId !== identity.tenantId || claims.workspaceId !== workspaceId
+          || claims.receiptId !== payload.receiptId || claims.audioSha256 !== produced.audioSha256
+          || claims.narrationSha256 !== createHash("sha256").update(payload.text).digest("hex")
+          || claims.durationCutS !== produced.durationCutS || claims.durationRawS !== produced.durationRawS
+          || claims.budgetId !== budget.budgetId || !isRecord(consent) || consent.runId !== result.runId || consent.requestDigest !== result.requestDigest
+          || !isRecord(profile) || profile.profileId !== voice.voice_profile || profile.revision !== voice.profile_revision
+          || !same(profile.configuration,voice.configuration)
+          || (Object.hasOwn(voice,"calibration_run") ? profile.calibrationRunId !== voice.calibration_run
+            : profile.grantId !== voice.reuse_grant || profile.version !== voice.reuse_version)
+          || ![claims.chargedCredits,claims.costUpperBoundUsdMicros].every(v => Number.isSafeInteger(v) && (v as number) >= 0)
+          || (claims.chargedCredits as number) > (estimate.maximum_credits as number)
+          || (claims.costUpperBoundUsdMicros as number) > (estimate.maximum_usd_micros as number))
+        throw new ConflictError("Invalid attested real production result");
+    }
     return result;
   }
 

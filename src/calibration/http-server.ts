@@ -275,8 +275,9 @@ async function dispatch(
     const reuseRevoke = /^\/api\/v1\/reusable-voice-profiles\/[^/]+\/revoke$/.test(url.pathname);
     const projectVoice = url.pathname === "/api/v1/projects/voice";
     const projectCalibration = url.pathname === "/api/v1/projects/calibration";
+    const projectProduction = url.pathname === "/api/v1/projects/production";
     const preparation = url.pathname === "/api/v1/projects/preparation";
-    const metadataOnly = projectCalibration || projectVoice || preparation || url.pathname.startsWith("/api/v1/reusable-voice-profiles") || reusePublish
+    const metadataOnly = projectProduction || projectCalibration || projectVoice || preparation || url.pathname.startsWith("/api/v1/reusable-voice-profiles") || reusePublish
       || (method === "GET" && url.pathname === "/api/v1/calibration/schema");
     let sourceAccess = false;
     if (options.resolveApplication && !metadataOnly) {
@@ -288,6 +289,23 @@ async function dispatch(
         if (!(method === "GET" && url.pathname === "/api/v1/bootstrap"))
           throw new HttpError(403, "source_data_forbidden", "Explicit project/dataset source-data rights required");
       }
+    }
+    if (projectProduction && method === "POST") {
+      if (!options.resolveApplication || !selected.identity)
+        throw new HttpError(403,"authenticated_project_required","Authenticated project required");
+      requireNonce(request,application);
+      const body = await parseBody(request);
+      assertRequestWorkspace(url,body,workspaceId);
+      const {action,...payload} = body;
+      if (!["propose","inspect","approve","decline","execute","reconcile"].includes(action as string))
+        throw new HttpError(400,"invalid_production_action","Production action refused");
+      const expected = ["binding","voice","text","receiptId",...(action === "propose" ? [] : ["runId","requestDigest"]),
+        ...(action === "approve" ? ["agreement"] : action === "decline" ? ["decision"] : [])].sort().join();
+      if (Object.keys(payload).sort().join() !== expected)
+        throw new HttpError(400,"invalid_production_scope","Unexpected production fields");
+      sendJson(response,200,await application.projectProduction(workspaceId,selected.identity,
+        action as "propose" | "inspect" | "approve" | "decline" | "execute" | "reconcile",payload));
+      return;
     }
     if (projectCalibration && method === "POST") {
       if (!options.resolveApplication || !selected.identity)

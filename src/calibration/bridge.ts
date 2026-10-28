@@ -89,7 +89,8 @@ export interface CalibrationBridge {
     workspaceId: string;
     identity: { userId: string; tenantId: string };
     operation: "create" | "inspect" | "select" | "readiness" | "predict" | "verify" | "produce"
-      | `calibration-${"propose" | "inspect" | "approve" | "decline" | "execute" | "publish" | "reconcile"}`;
+      | `calibration-${"propose" | "inspect" | "approve" | "decline" | "execute" | "publish" | "reconcile"}`
+      | `production-${"propose" | "inspect" | "approve" | "decline" | "execute" | "reconcile"}`;
     payload: Record<string, unknown>;
   }): Promise<Record<string, unknown>>;
   reusableProfiles?(input: {
@@ -231,7 +232,7 @@ class NodeMcpStdioTransport implements CalibrationTransport {
     private readonly command = "voice-calibration-mcp",
     private readonly args: string[] = [],
     private readonly cwd?: string,
-    launch?: { tenantId?: string; wpmPath?: string; workspaceId?: string; stateDir?: string; uiWorkspaceDir?: string },
+    launch?: { tenantId?: string; wpmPath?: string; workspaceId?: string; stateDir?: string; uiWorkspaceDir?: string; executionBudgetIds?: readonly string[] },
   ) {
     this.boundInstance = launch?.workspaceId !== undefined;
     this.launchEnv = this.boundInstance
@@ -259,6 +260,13 @@ class NodeMcpStdioTransport implements CalibrationTransport {
         )
       : { ...process.env };
     if (launch !== undefined) {
+      delete this.launchEnv.VOICE_CALIBRATION_EXECUTION_BUDGET_IDS;
+      if (launch.executionBudgetIds !== undefined) {
+        if (!Array.isArray(launch.executionBudgetIds) || launch.executionBudgetIds.some(id => typeof id !== "string" || !/^budget_[0-9a-f]{32}$/.test(id))
+            || new Set(launch.executionBudgetIds).size !== launch.executionBudgetIds.length)
+          throw new TypeError("Invalid trusted execution budget IDs");
+        this.launchEnv.VOICE_CALIBRATION_EXECUTION_BUDGET_IDS = JSON.stringify(launch.executionBudgetIds);
+      }
       delete this.launchEnv.VOICE_WPM_PATH;
       delete this.launchEnv.VOICE_CALIBRATION_WORKSPACE_ID;
       delete this.launchEnv.VOICE_CALIBRATION_TENANT_ID;
@@ -604,6 +612,7 @@ export function createCalibrationBridge(options: {
   tenantId?: string;
   stateDir?: string;
   uiWorkspaceDir?: string;
+  executionBudgetIds?: readonly string[];
 }): CalibrationBridge {
   const launch =
     Object.hasOwn(options, "wpmPath") || options.workspaceId !== undefined
@@ -613,6 +622,7 @@ export function createCalibrationBridge(options: {
           tenantId: options.tenantId,
           stateDir: options.stateDir,
           uiWorkspaceDir: options.uiWorkspaceDir,
+          executionBudgetIds: options.executionBudgetIds,
         }
       : undefined;
   const transport = options.transport ?? new NodeMcpStdioTransport(undefined, undefined, undefined, launch);

@@ -19,7 +19,7 @@ export interface SupabaseAuthOptions {
 export type TenantWorkspaceOptions = Required<
   Pick<CalibrationUiOptions, "tenantId" | "workspaceId" | "dataDir" | "stateDir" | "wpmPath" | "credentials">
 > &
-  Pick<CalibrationUiOptions, "mcpTransport">;
+  Pick<CalibrationUiOptions, "mcpTransport" | "executionBudgetIds">;
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
