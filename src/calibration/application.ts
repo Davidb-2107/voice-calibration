@@ -1027,6 +1027,9 @@ export class CalibrationApplication {
       return result;
     }
     const voice = result.voice;
+    const privateCalibration = isRecord(voice) && Object.hasOwn(voice, "calibration_run");
+    const requestedCalibration = operation === "select" && isRecord(payload.profile)
+      ? payload.profile.calibrationRunId : isRecord(payload.voice) ? payload.voice.calibration_run : undefined;
     const expected = ["binding", "voice", "ready", "productionReady", "observedRuns", "source", "datasetRevision",
       ...(["predict", "verify"].includes(operation) ? ["receiptId", "seconds", "expiresAt", "p25S", "p75S"] : [])];
     if (Object.keys(result).sort().join() !== expected.sort().join()
@@ -1036,13 +1039,17 @@ export class CalibrationApplication {
         || typeof result.source.revision !== "string" || !/^sha256:[0-9a-f]{64}$/.test(result.source.revision)
         || typeof result.datasetRevision !== "string" || !/^sha256:[0-9a-f]{64}$/.test(result.datasetRevision))
       throw new ConflictError("Project prediction identity mismatch");
-    if (!isRecord(voice) || Object.keys(voice).sort().join() !==
-        "_schema,atempo,calibration_workspace,configuration,corpus,name,profile_revision,reuse_grant,reuse_version,voice_profile"
+    if (!isRecord(voice) || Object.keys(voice).sort().join() !== (privateCalibration
+        ? "_schema,atempo,calibration_run,calibration_workspace,configuration,corpus,name,profile_revision,voice_profile"
+        : "_schema,atempo,calibration_workspace,configuration,corpus,name,profile_revision,reuse_grant,reuse_version,voice_profile")
         || voice._schema !== "voice-profile-v1" || voice.calibration_workspace !== workspaceId
         || typeof voice.profile_revision !== "string" || !/^sha256:[0-9a-f]{64}$/.test(voice.profile_revision)
-        || typeof voice.reuse_grant !== "string" || !/^reuse_[0-9a-f]{64}$/.test(voice.reuse_grant)
-        || !["name", "profile_revision", "reuse_grant", "voice_profile"].every(key => typeof voice[key] === "string")
-        || !Number.isInteger(voice.reuse_version) || (voice.reuse_version as number) < 1 || voice.atempo !== 1
+        || (privateCalibration
+          ? typeof voice.calibration_run !== "string" || !/^[0-9a-f-]{36}$/.test(voice.calibration_run)
+            || voice.calibration_run !== requestedCalibration || result.source.kind !== "project"
+          : typeof voice.reuse_grant !== "string" || !/^reuse_[0-9a-f]{64}$/.test(voice.reuse_grant)
+            || !Number.isInteger(voice.reuse_version) || (voice.reuse_version as number) < 1)
+        || !["name", "profile_revision", "voice_profile"].every(key => typeof voice[key] === "string") || voice.atempo !== 1
         || !isRecord(voice.corpus) || Object.keys(voice.corpus).sort().join() !== "alias,language,style"
         || !Object.values(voice.corpus).every(value => typeof value === "string")
         || !isRecord(voice.configuration) || Object.keys(voice.configuration).sort().join() !==
