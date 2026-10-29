@@ -88,7 +88,14 @@ export interface CalibrationBridge {
   prepareProject?(input: {
     workspaceId: string;
     identity: { userId: string; tenantId: string };
-    operation: "create" | "inspect" | "select" | "readiness" | "predict" | "verify" | "produce"
+    operation:
+      | "create"
+      | "inspect"
+      | "select"
+      | "readiness"
+      | "predict"
+      | "verify"
+      | "produce"
       | `calibration-${"propose" | "inspect" | "approve" | "decline" | "execute" | "publish" | "reconcile"}`
       | `production-${"propose" | "inspect" | "approve" | "decline" | "execute" | "reconcile"}`;
     payload: Record<string, unknown>;
@@ -232,7 +239,14 @@ class NodeMcpStdioTransport implements CalibrationTransport {
     private readonly command = "voice-calibration-mcp",
     private readonly args: string[] = [],
     private readonly cwd?: string,
-    launch?: { tenantId?: string; wpmPath?: string; workspaceId?: string; stateDir?: string; uiWorkspaceDir?: string; executionBudgetIds?: readonly string[] },
+    launch?: {
+      tenantId?: string;
+      wpmPath?: string;
+      workspaceId?: string;
+      stateDir?: string;
+      uiWorkspaceDir?: string;
+      executionBudgetIds?: readonly string[];
+    },
   ) {
     this.boundInstance = launch?.workspaceId !== undefined;
     this.launchEnv = this.boundInstance
@@ -262,8 +276,11 @@ class NodeMcpStdioTransport implements CalibrationTransport {
     if (launch !== undefined) {
       delete this.launchEnv.VOICE_CALIBRATION_EXECUTION_BUDGET_IDS;
       if (launch.executionBudgetIds !== undefined) {
-        if (!Array.isArray(launch.executionBudgetIds) || launch.executionBudgetIds.some(id => typeof id !== "string" || !/^budget_[0-9a-f]{32}$/.test(id))
-            || new Set(launch.executionBudgetIds).size !== launch.executionBudgetIds.length)
+        if (
+          !Array.isArray(launch.executionBudgetIds) ||
+          launch.executionBudgetIds.some((id) => typeof id !== "string" || !/^budget_[0-9a-f]{32}$/.test(id)) ||
+          new Set(launch.executionBudgetIds).size !== launch.executionBudgetIds.length
+        )
           throw new TypeError("Invalid trusted execution budget IDs");
         this.launchEnv.VOICE_CALIBRATION_EXECUTION_BUDGET_IDS = JSON.stringify(launch.executionBudgetIds);
       }
@@ -676,63 +693,113 @@ export function createCalibrationBridge(options: {
   let sourceScope: Promise<TransportCall & { secret: string }> | undefined;
   let exitListener: (() => void) | undefined;
   let exited = false;
-  transport.onExit?.(() => { sourceScope = undefined; exited = true; exitListener?.(); });
+  transport.onExit?.(() => {
+    sourceScope = undefined;
+    exited = true;
+    exitListener?.();
+  });
 
   return {
-    onExit: (listener) => { exitListener = listener; if (exited) listener(); },
+    onExit: (listener) => {
+      exitListener = listener;
+      if (exited) listener();
+    },
     async prepareProject(input) {
       const handshake = await invokeTool("get_preparation_scope", { workspace_id: input.workspaceId });
       const scope = resultObject(handshake.response);
-      if (handshake.remoteError || scope.schema !== "project-preparation-scope-v1"
-          || scope.tenantId !== input.identity.tenantId || scope.workspaceId !== input.workspaceId
-          || typeof scope.engineId !== "string"
-          || Object.keys(scope).sort().join() !== "engineId,schema,tenantId,workspaceId")
+      if (
+        handshake.remoteError ||
+        scope.schema !== "project-preparation-scope-v1" ||
+        scope.tenantId !== input.identity.tenantId ||
+        scope.workspaceId !== input.workspaceId ||
+        typeof scope.engineId !== "string" ||
+        Object.keys(scope).sort().join() !== "engineId,schema,tenantId,workspaceId"
+      )
         throw new Error("Preparation engine scope mismatch");
-      const canonical = (value: unknown): string => JSON.stringify(value, (_key, item) =>
-        item && typeof item === "object" && !Array.isArray(item)
-          ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item);
-      const claims = { tenantId: scope.tenantId, workspaceId: scope.workspaceId, engineId: scope.engineId,
-        userId: input.identity.userId, operation: input.operation,
+      const canonical = (value: unknown): string =>
+        JSON.stringify(value, (_key, item) =>
+          item && typeof item === "object" && !Array.isArray(item)
+            ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+            : item,
+        );
+      const claims = {
+        tenantId: scope.tenantId,
+        workspaceId: scope.workspaceId,
+        engineId: scope.engineId,
+        userId: input.identity.userId,
+        operation: input.operation,
         target: createHash("sha256").update(canonical(input.payload)).digest("hex"),
-        expiresAt: Math.floor(Date.now() / 1000) + 60 };
+        expiresAt: Math.floor(Date.now() / 1000) + 60,
+      };
       const signature = createHmac("sha256", handshake.secret)
-        .update("project-preparation-v1\0" + canonical(claims)).digest("hex");
-      const result = await invokeTool("prepare_project", { workspace_id: input.workspaceId,
-        operation: input.operation, payload: input.payload, capability: { claims, signature } });
+        .update("project-preparation-v1\0" + canonical(claims))
+        .digest("hex");
+      const result = await invokeTool("prepare_project", {
+        workspace_id: input.workspaceId,
+        operation: input.operation,
+        payload: input.payload,
+        capability: { claims, signature },
+      });
       if (result.remoteError) throw new Error("Preparation refused");
       return resultObject(redact(result.response, result.secret));
     },
     async reusableProfiles(input) {
       assertWorkspaceId(input.workspaceId);
-      sourceScope ??= invokeTool("get_reuse_scope", { workspace_id: input.workspaceId }).catch(error => {
+      sourceScope ??= invokeTool("get_reuse_scope", { workspace_id: input.workspaceId }).catch((error) => {
         sourceScope = undefined;
         throw error;
       });
       const handshake = await sourceScope;
       const scope = resultObject(redact(handshake.response, handshake.secret));
-      if (handshake.remoteError || scope.schema !== "source-access-scope-v1"
-          || scope.workspaceId !== input.workspaceId || scope.tenantId !== input.identity.tenantId)
+      if (
+        handshake.remoteError ||
+        scope.schema !== "source-access-scope-v1" ||
+        scope.workspaceId !== input.workspaceId ||
+        scope.tenantId !== input.identity.tenantId
+      )
         throw new Error("reuse engine scope mismatch");
       if (scope.mode === "legacy" && input.operation === "source-read") {
         if (Object.keys(scope).sort().join() !== ["schema", "mode", "tenantId", "workspaceId"].sort().join())
           throw new Error("invalid legacy engine attestation");
         return { authorized: true, mode: "legacy", workspaceId: scope.workspaceId, tenantId: scope.tenantId };
       }
-      if (scope.mode !== "scoped"
-          || Object.keys(scope).sort().join() !== ["schema", "mode", "tenantId", "workspaceId", "projectId", "datasetId", "engineId"].sort().join()
-          || typeof scope.projectId !== "string" || typeof scope.datasetId !== "string" || typeof scope.engineId !== "string")
+      if (
+        scope.mode !== "scoped" ||
+        Object.keys(scope).sort().join() !==
+          ["schema", "mode", "tenantId", "workspaceId", "projectId", "datasetId", "engineId"].sort().join() ||
+        typeof scope.projectId !== "string" ||
+        typeof scope.datasetId !== "string" ||
+        typeof scope.engineId !== "string"
+      )
         throw new Error("reuse engine scope mismatch");
-      const claims = { tenantId: scope.tenantId, workspaceId: scope.workspaceId, projectId: scope.projectId,
-        datasetId: scope.datasetId, engineId: scope.engineId, userId: input.identity.userId,
-        operation: input.operation, target: input.target, expiresAt: Math.floor(Date.now() / 1000) + 60 };
+      const claims = {
+        tenantId: scope.tenantId,
+        workspaceId: scope.workspaceId,
+        projectId: scope.projectId,
+        datasetId: scope.datasetId,
+        engineId: scope.engineId,
+        userId: input.identity.userId,
+        operation: input.operation,
+        target: input.target,
+        expiresAt: Math.floor(Date.now() / 1000) + 60,
+      };
       const encoded = JSON.stringify(claims, Object.keys(claims).sort());
-      const signature = createHmac("sha256", handshake.secret).update("voice-profile-reuse-v1\0" + encoded).digest("hex");
-      const tool = { catalog: "get_reusable_profiles", publish: "publish_reusable_profile", revoke: "revoke_reusable_profile",
-        "source-read": "authorize_source_read" }[input.operation];
-      const result = await invokeTool(tool, { workspace_id: input.workspaceId, capability: { claims, signature },
+      const signature = createHmac("sha256", handshake.secret)
+        .update("voice-profile-reuse-v1\0" + encoded)
+        .digest("hex");
+      const tool = {
+        catalog: "get_reusable_profiles",
+        publish: "publish_reusable_profile",
+        revoke: "revoke_reusable_profile",
+        "source-read": "authorize_source_read",
+      }[input.operation];
+      const result = await invokeTool(tool, {
+        workspace_id: input.workspaceId,
+        capability: { claims, signature },
         ...(input.operation === "publish" ? { run_id: input.target } : {}),
         ...(input.operation === "source-read" ? { resource: input.target } : {}),
-        ...(input.operation === "revoke" ? { grant_id: input.target } : {}) });
+        ...(input.operation === "revoke" ? { grant_id: input.target } : {}),
+      });
       if (result.remoteError) throw new Error("reuse operation refused");
       return resultObject(redact(result.response, result.secret));
     },
@@ -967,7 +1034,10 @@ export function createCalibrationBridge(options: {
       }
       return { status: "unknown" };
     },
-    close: () => { sourceScope = undefined; return transport.close(); },
+    close: () => {
+      sourceScope = undefined;
+      return transport.close();
+    },
   };
 }
 

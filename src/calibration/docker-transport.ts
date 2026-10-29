@@ -56,8 +56,13 @@ export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
     const ui = canonicalLocalPath(options.uiWorkspaceDir);
     const restoreGuard = options.restoreGuardDir ? canonicalLocalPath(options.restoreGuardDir) : undefined;
     if (options.datasetAdmission !== undefined) {
-      if (!options.datasetAdmission || typeof options.datasetAdmission !== "object" || Array.isArray(options.datasetAdmission)
-          || !restoreGuard || Object.keys(options.datasetAdmission).sort().join() !== "datasetId,projectId")
+      if (
+        !options.datasetAdmission ||
+        typeof options.datasetAdmission !== "object" ||
+        Array.isArray(options.datasetAdmission) ||
+        !restoreGuard ||
+        Object.keys(options.datasetAdmission).sort().join() !== "datasetId,projectId"
+      )
         throw new Error("Scoped dataset requires independent restore control");
       assertWorkspaceId(options.datasetAdmission.projectId);
       assertWorkspaceId(options.datasetAdmission.datasetId);
@@ -119,11 +124,16 @@ export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
             "VOICE_CALIBRATION_PROVIDER_REGISTRY_KEY=/restore-control/provider-registry.key",
           ]
         : []),
-      ...(options.datasetAdmission ? [
-        "--mount", `type=bind,src=${join(restoreGuard!, "dataset-control")},dst=/dataset-control`,
-        "--env", "VOICE_CALIBRATION_DATASET_CONTROL_DIR=/dataset-control",
-        "--env", `VOICE_CALIBRATION_DATASET_ADMISSION=${JSON.stringify(options.datasetAdmission)}`,
-      ] : []),
+      ...(options.datasetAdmission
+        ? [
+            "--mount",
+            `type=bind,src=${join(restoreGuard!, "dataset-control")},dst=/dataset-control`,
+            "--env",
+            "VOICE_CALIBRATION_DATASET_CONTROL_DIR=/dataset-control",
+            "--env",
+            `VOICE_CALIBRATION_DATASET_ADMISSION=${JSON.stringify(options.datasetAdmission)}`,
+          ]
+        : []),
       "--env",
       "HOME=/tmp",
       "--env",
