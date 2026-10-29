@@ -31,6 +31,7 @@ export interface CalibrationUiOptions {
   wpmPath?: string;
   stateDir?: string;
   mcpTransport?: CalibrationTransport;
+  executionBudgetIds?: readonly string[];
 }
 
 export async function createVoiceCalibrationApplication(
@@ -149,6 +150,7 @@ export async function createVoiceCalibrationApplication(
     wpmPath,
     tenantId: options.tenantId,
     transport: options.mcpTransport,
+    executionBudgetIds: options.executionBudgetIds,
     ...(boundInstance
       ? { workspaceId, stateDir, uiWorkspaceDir: resolve(resolvedDataDir, "workspaces", workspaceId) }
       : {}),

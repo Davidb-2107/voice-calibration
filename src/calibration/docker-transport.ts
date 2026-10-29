@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { mkdir, open } from "node:fs/promises";
+import { mkdir, open, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { promisify } from "node:util";
 import { bootstrapStage } from "./bootstrap-diagnostics.js";
@@ -18,6 +18,7 @@ export interface DockerEngineOptions {
   stateDir: string;
   uiWorkspaceDir: string;
   restoreGuardDir?: string;
+  datasetAdmission?: Readonly<{ projectId: string; datasetId: string }>;
 }
 
 export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
@@ -54,6 +55,18 @@ export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
     const writable = [canonicalLocalPath(options.stateDir), dirname(canonicalLocalPath(options.wpmPath))];
     const ui = canonicalLocalPath(options.uiWorkspaceDir);
     const restoreGuard = options.restoreGuardDir ? canonicalLocalPath(options.restoreGuardDir) : undefined;
+    if (options.datasetAdmission !== undefined) {
+      if (
+        !options.datasetAdmission ||
+        typeof options.datasetAdmission !== "object" ||
+        Array.isArray(options.datasetAdmission) ||
+        !restoreGuard ||
+        Object.keys(options.datasetAdmission).sort().join() !== "datasetId,projectId"
+      )
+        throw new Error("Scoped dataset requires independent restore control");
+      assertWorkspaceId(options.datasetAdmission.projectId);
+      assertWorkspaceId(options.datasetAdmission.datasetId);
+    }
     if (restoreGuard) {
       for (const [parent, child] of [
         [root, restoreGuard],
@@ -111,6 +124,16 @@ export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
             "VOICE_CALIBRATION_PROVIDER_REGISTRY_KEY=/restore-control/provider-registry.key",
           ]
         : []),
+      ...(options.datasetAdmission
+        ? [
+            "--mount",
+            `type=bind,src=${join(restoreGuard!, "dataset-control")},dst=/dataset-control`,
+            "--env",
+            "VOICE_CALIBRATION_DATASET_CONTROL_DIR=/dataset-control",
+            "--env",
+            `VOICE_CALIBRATION_DATASET_ADMISSION=${JSON.stringify(options.datasetAdmission)}`,
+          ]
+        : []),
       "--env",
       "HOME=/tmp",
       "--env",
@@ -138,6 +161,7 @@ export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
       stateDir: canonicalLocalPath(options.stateDir),
       uiWorkspaceDir: canonicalLocalPath(options.uiWorkspaceDir),
       restoreGuardDir: restoreGuard,
+      ...(options.datasetAdmission ? { datasetAdmission: Object.freeze({ ...options.datasetAdmission }) } : {}),
     });
     this.containerName = containerName;
     this.corpusPath = launch.wpmPath;
@@ -151,6 +175,11 @@ export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
       const lockPath = join(this.binding.uiWorkspaceDir, ".instance.lock");
       await assertNoSymlinkWithin(this.hostRoot, lockPath);
       if (this.binding.restoreGuardDir) {
+        if (this.binding.datasetAdmission) {
+          const control = join(this.binding.restoreGuardDir, "dataset-control");
+          await assertNoSymlinkWithin(this.binding.restoreGuardDir, join(control, "guard.reuse-source-authority.json"));
+          if (!(await stat(control)).isDirectory()) throw new Error("Provisioned dataset control directory required");
+        }
         await assertNoSymlinkWithin(this.binding.restoreGuardDir, join(this.binding.restoreGuardDir, "guard.json"));
         await assertNoSymlinkWithin(
           this.binding.restoreGuardDir,

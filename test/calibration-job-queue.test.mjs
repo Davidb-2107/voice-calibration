@@ -30,7 +30,7 @@ test("HTTP shutdown suspends waiting execute jobs before draining responses", as
   const { queue } = await fixture(t, 1);
   const hold = deferred();
   const executions = [];
-  const app = { getSessionNonce: () => "nonce", getRun: async (_ws, id) => run(Number(id.split("-")[1])),
+  const app = { authorizeSourceRead: async () => {}, getSessionNonce: () => "nonce", getRun: async (_ws, id) => run(Number(id.split("-")[1])),
     execute: async (_ws, id) => {
       executions.push(id);
       if (id === "run-0") await hold.promise;
@@ -198,7 +198,7 @@ test("one workspace cannot occupy two execution slots", async (t) => {
 test("protected HTTP queue returns 202, rechecks authorization, and isolates job reads", async (t) => {
   const { queue } = await fixture(t, 1);
   const hold = deferred(); let paid = 0, authorized = true, authCalls = 0;
-  const app = { getSessionNonce: () => "nonce", getRun: async (_ws, id) => run(Number(id.split("-")[1])),
+  const app = { authorizeSourceRead: async () => {}, getSessionNonce: () => "nonce", getRun: async (_ws, id) => run(Number(id.split("-")[1])),
     execute: async (_ws, id) => { paid++; await hold.promise; return { ...run(Number(id.split("-")[1])), status: "succeeded" }; } };
   const ui = await startCalibrationUi({ jobQueue: queue, closeApplications: async () => {}, resolveApplication: async (request) => {
     authCalls++;
@@ -335,7 +335,7 @@ test("confirmed engine shutdown releases ownership only after draining execution
 test("duplicate HTTP enqueue does not call a busy MCP run reader", async (t) => {
   const { queue } = await fixture(t, 1);
   const hold = deferred(); let executing = false, unavailable = false, reads = 0;
-  const app = { getSessionNonce: () => "nonce", getRun: async () => {
+  const app = { authorizeSourceRead: async () => {}, getSessionNonce: () => "nonce", getRun: async () => {
     reads++; if (unavailable) throw new Error("busy MCP reader"); return run(0);
   }, execute: async () => { executing = true; await hold.promise; return { ...run(0), status: "succeeded" }; } };
   const ui = await startCalibrationUi({ jobQueue: queue, closeApplications: async () => {},

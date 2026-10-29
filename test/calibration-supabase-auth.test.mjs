@@ -78,6 +78,8 @@ test("protected Docker API recreates its transport after each idle stop", async 
     return { type: "object" };
   });
   t.mock.method(DockerMcpStdioTransport.prototype, "callTool", async function (name) {
+    if (name === "get_reuse_scope") return { emitted: true, response: {
+      schema: "source-access-scope-v1", mode: "legacy", tenantId: "tenant-a", workspaceId: "workspace-a" } };
     strictEqual(name, "get_server_info");
     return { emitted: true, response: { tenant_id: "tenant-a", workspace_id: "workspace-a",
       state_dir: this.instanceStateDir } };

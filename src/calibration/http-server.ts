@@ -271,8 +271,160 @@ async function dispatch(
     assertRequestWorkspace(url, undefined, workspaceId);
     if (options.resolveApplication && !url.pathname.startsWith("/api/v1/"))
       throw new HttpError(404, "not_found", "API route not found");
+    const reusePublish = /^\/api\/v1\/calibration-runs\/[^/]+\/reuse-publication$/.test(url.pathname);
+    const reuseRevoke = /^\/api\/v1\/reusable-voice-profiles\/[^/]+\/revoke$/.test(url.pathname);
+    const projectVoice = url.pathname === "/api/v1/projects/voice";
+    const projectCalibration = url.pathname === "/api/v1/projects/calibration";
+    const projectProduction = url.pathname === "/api/v1/projects/production";
+    const preparation = url.pathname === "/api/v1/projects/preparation";
+    const metadataOnly =
+      projectProduction ||
+      projectCalibration ||
+      projectVoice ||
+      preparation ||
+      url.pathname.startsWith("/api/v1/reusable-voice-profiles") ||
+      reusePublish ||
+      (method === "GET" && url.pathname === "/api/v1/calibration/schema");
+    let sourceAccess = false;
+    if (options.resolveApplication && !metadataOnly) {
+      if (!selected.identity)
+        throw new HttpError(403, "source_data_forbidden", "Authenticated source identity required");
+      try {
+        await application.authorizeSourceRead(workspaceId, selected.identity, `${method} ${url.pathname}`);
+        sourceAccess = true;
+      } catch {
+        if (!(method === "GET" && url.pathname === "/api/v1/bootstrap"))
+          throw new HttpError(403, "source_data_forbidden", "Explicit project/dataset source-data rights required");
+      }
+    }
+    if (projectProduction && method === "POST") {
+      if (!options.resolveApplication || !selected.identity)
+        throw new HttpError(403, "authenticated_project_required", "Authenticated project required");
+      requireNonce(request, application);
+      const body = await parseBody(request);
+      assertRequestWorkspace(url, body, workspaceId);
+      const { action, ...payload } = body;
+      if (!["propose", "inspect", "approve", "decline", "execute", "reconcile"].includes(action as string))
+        throw new HttpError(400, "invalid_production_action", "Production action refused");
+      const expected = [
+        "binding",
+        "voice",
+        "text",
+        "receiptId",
+        ...(action === "propose" ? [] : ["runId", "requestDigest"]),
+        ...(action === "approve" ? ["agreement"] : action === "decline" ? ["decision"] : []),
+      ]
+        .sort()
+        .join();
+      if (Object.keys(payload).sort().join() !== expected)
+        throw new HttpError(400, "invalid_production_scope", "Unexpected production fields");
+      sendJson(
+        response,
+        200,
+        await application.projectProduction(
+          workspaceId,
+          selected.identity,
+          action as "propose" | "inspect" | "approve" | "decline" | "execute" | "reconcile",
+          payload,
+        ),
+      );
+      return;
+    }
+    if (projectCalibration && method === "POST") {
+      if (!options.resolveApplication || !selected.identity)
+        throw new HttpError(403, "authenticated_project_required", "Authenticated project required");
+      requireNonce(request, application);
+      const body = await parseBody(request);
+      assertRequestWorkspace(url, body, workspaceId);
+      const { action, ...payload } = body;
+      if (!["propose", "inspect", "approve", "decline", "execute", "publish", "reconcile"].includes(action as string))
+        throw new HttpError(400, "invalid_calibration_action", "Calibration action refused");
+      const expected =
+        action === "propose"
+          ? "binding,request"
+          : action === "approve"
+            ? "agreement,binding,request,requestDigest,runId"
+            : action === "decline"
+              ? "binding,decision,request,requestDigest,runId"
+              : "binding,request,requestDigest,runId";
+      if (Object.keys(payload).sort().join() !== expected)
+        throw new HttpError(400, "invalid_calibration_scope", "Unexpected calibration fields");
+      sendJson(
+        response,
+        200,
+        await application.projectCalibration(
+          workspaceId,
+          selected.identity,
+          action as "propose" | "inspect" | "approve" | "decline" | "execute" | "publish" | "reconcile",
+          payload,
+        ),
+      );
+      return;
+    }
+    if (projectVoice && method === "POST") {
+      if (!options.resolveApplication || !selected.identity)
+        throw new HttpError(403, "authenticated_project_required", "Authenticated project required");
+      requireNonce(request, application);
+      const body = await parseBody(request);
+      assertRequestWorkspace(url, body, workspaceId);
+      const { operation, ...payload } = body;
+      if (!["select", "readiness", "predict", "verify", "produce"].includes(operation as string))
+        throw new HttpError(400, "invalid_project_operation", "Project operation refused");
+      const expected =
+        operation === "select"
+          ? "binding,profile"
+          : operation === "readiness"
+            ? "binding,voice"
+            : operation === "predict"
+              ? "binding,text,voice"
+              : "binding,receiptId,text,voice";
+      if (Object.keys(payload).sort().join() !== expected)
+        throw new HttpError(400, "invalid_project_scope", "Unexpected project fields");
+      sendJson(
+        response,
+        200,
+        await application.projectVoice(
+          workspaceId,
+          selected.identity,
+          operation as "select" | "readiness" | "predict" | "verify" | "produce",
+          payload,
+        ),
+      );
+      return;
+    }
+    if (preparation && method === "POST") {
+      if (!options.resolveApplication || !selected.identity)
+        throw new HttpError(403, "authenticated_preparation_required", "Authenticated preparation required");
+      requireNonce(request, application);
+      const body = await parseBody(request);
+      assertRequestWorkspace(url, body, workspaceId);
+      const operation = body.operation;
+      const tracked = Object.hasOwn(body, "operationId");
+      const expected =
+        operation === "create"
+          ? tracked
+            ? "expectedGeneration,name,operation,operationId,root"
+            : "name,operation"
+          : tracked
+            ? "operation,operationId"
+            : "binding,operation";
+      if ((operation !== "create" && operation !== "inspect") || Object.keys(body).sort().join() !== expected)
+        throw new HttpError(400, "invalid_preparation", "Only creation or inspection payloads are accepted");
+      const { operation: _operation, ...payload } = body;
+      sendJson(response, 200, await application.prepareProject(workspaceId, selected.identity, operation, payload));
+      return;
+    }
     if (method === "GET" && url.pathname === "/api/v1/bootstrap") {
-      const bootstrap = await bootstrapStage("bootstrap", () => application.getBootstrap(workspaceId));
+      const bootstrap =
+        options.resolveApplication && !sourceAccess
+          ? {
+              sessionNonce: application.getSessionNonce(),
+              config: { configured: false },
+              activeCorpus: null,
+              profiles: [],
+              recentRuns: [],
+            }
+          : await bootstrapStage("bootstrap", () => application.getBootstrap(workspaceId));
       sendJson(
         response,
         200,
@@ -444,6 +596,25 @@ async function dispatch(
       const run = await application.getRun(workspaceId, runId);
       if (!run) throw new NotFoundError("calibration run not found");
       sendJson(response, 200, { ...run, report: await application.getReport(workspaceId, runId) });
+      return;
+    }
+    if (
+      (method === "GET" && url.pathname === "/api/v1/reusable-voice-profiles") ||
+      (method === "POST" && (reusePublish || reuseRevoke))
+    ) {
+      if (!options.resolveApplication || !selected.identity)
+        throw new HttpError(403, "authenticated_reuse_required", "Authenticated reuse identity required");
+      if ([...url.searchParams.keys()].some((key) => key !== "workspaceId"))
+        throw new HttpError(400, "invalid_reuse_scope", "Client reuse scope is forbidden");
+      if (method === "POST") {
+        requireNonce(request, application);
+        const body = await parseBody(request);
+        if (Object.keys(body).length !== 0)
+          throw new HttpError(400, "invalid_reuse_scope", "Publication and revocation accept an empty object only");
+      }
+      const operation = reusePublish ? "publish" : reuseRevoke ? "revoke" : "catalog";
+      const target = operation === "catalog" ? "" : idFromPath(url.pathname);
+      sendJson(response, 200, await application.reusableProfiles(workspaceId, selected.identity, operation, target));
       return;
     }
     if (method === "GET" && url.pathname === "/api/v1/live-voice-profiles") {
