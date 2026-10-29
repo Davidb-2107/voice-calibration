@@ -51,7 +51,13 @@ export class EngineManager {
     for (const registration of registrations) {
       assertWorkspaceId(registration.workspaceId);
       if (this.slots.has(registration.workspaceId)) throw new Error("Duplicate engine registration");
-      const slot: Slot = { create: registration.create, preflight: registration.preflight, facade: {} as CalibrationEngine, blocked: true, active: 0 };
+      const slot: Slot = {
+        create: registration.create,
+        preflight: registration.preflight,
+        facade: {} as CalibrationEngine,
+        blocked: true,
+        active: 0,
+      };
       slot.facade = new Proxy({} as CalibrationEngine, {
         get: (_target, property) => {
           if (property === "then") return undefined;

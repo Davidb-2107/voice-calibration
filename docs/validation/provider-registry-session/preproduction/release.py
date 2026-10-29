@@ -89,6 +89,12 @@ def require_gates(directory, evidence):
     return manifest
 
 
+def _financial_reader():
+    from voice_calibration.core.provider_registry import ProviderRegistry
+    from voice_calibration.core.financial_compatibility import check_target, required_capabilities
+    return ProviderRegistry, required_capabilities, check_target
+
+
 def financial_preflight(root, directory, config=None):
     """Runs in the trusted control interpreter, before loading any target code.
 
@@ -106,8 +112,7 @@ def financial_preflight(root, directory, config=None):
         registry_dir, registry_key = control/'provider-registry', control/'provider-registry.key'
         if not registry_dir.exists() and not registry_key.exists() and not config.get('providerRegistryRequired'):
             continue
-        from voice_calibration.core.provider_registry import ProviderRegistry
-        from voice_calibration.core.financial_compatibility import check_target, required_capabilities
+        ProviderRegistry, required_capabilities, check_target = _financial_reader()
         registry = ProviderRegistry(registry_dir, registry_key, workspace['workspaceId'], workspace['tenantId'])
         if not required_capabilities(registry):
             continue

@@ -20,8 +20,8 @@ import type {
   VoiceProfile,
 } from "./domain.js";
 import { assertWorkspaceId, transitionRun } from "./domain.js";
-import { fingerprintRequest } from "./fingerprint.js";
 import { validateFinancialRequest, validateFinancialResponse } from "./financial-contract.js";
+import { fingerprintRequest } from "./fingerprint.js";
 import type { LocalStore } from "./ports.js";
 import { ConflictError, type VoiceDirectoryPort } from "./ports.js";
 import { redactSensitive } from "./redaction.js";
@@ -1162,7 +1162,22 @@ export class CalibrationApplication {
     const budget = isRecord(estimate) ? estimate.budget : undefined;
     if (
       Object.keys(result).sort().join() !==
-        ["approval", "binding", "estimate", "production", "productionReady", "requestDigest", "runId", "schema", "spending", "status", "warning", ...financialKeys].sort().join() ||
+        [
+          "approval",
+          "binding",
+          "estimate",
+          "production",
+          "productionReady",
+          "requestDigest",
+          "runId",
+          "schema",
+          "spending",
+          "status",
+          "warning",
+          ...financialKeys,
+        ]
+          .sort()
+          .join() ||
       result.schema !== "project-production-consent-v2" ||
       !same(result.binding, binding) ||
       result.productionReady !== false ||

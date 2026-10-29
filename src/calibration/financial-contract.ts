@@ -15,8 +15,8 @@ export function validateFinancialRequest(action: string, payload: Record<string,
   if (
     action !== "propose" ||
     typeof payload.financialOperationKey !== "string" ||
-    (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(payload.financialOperationKey) ||
-      /[^A-Za-z0-9._:-]/.test(payload.financialOperationKey))
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(payload.financialOperationKey) ||
+    /[^A-Za-z0-9._:-]/.test(payload.financialOperationKey)
   ) {
     throw new ConflictError("Invalid financial operation key; proposal required");
   }
@@ -41,7 +41,7 @@ export function validateFinancialResponse(
   result: Record<string, unknown>,
 ): string[] {
   const keys = financialResultKeys(result);
-  if (action === "propose" && Object.hasOwn(payload, "financialOperationKey") !== (keys.length > 0)) {
+  if (action === "propose" && Object.hasOwn(payload, "financialOperationKey") !== keys.length > 0) {
     throw new ConflictError("Engine did not honor the requested financial mode");
   }
   return keys;

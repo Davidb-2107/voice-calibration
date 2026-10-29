@@ -9,24 +9,24 @@ import release
 
 class RuntimeIdentityTests(unittest.TestCase):
     def financial_state(self):
-        from voice_calibration.core.financial_contracts import FinanceScope, OperationSpec, SlotSpec, TrustedFinanceContext
-        from voice_calibration.core.financial_ledger import FinancialLedger
-        from voice_calibration.core.provider_registry import ProviderRegistry, digest
         control = self.root/'recovery'/'workspace-a'
         control.mkdir(parents=True)
-        registry = ProviderRegistry.initialize(control/'provider-registry', control/'provider-registry.key', 'workspace-a', 'tenant-a')
-        scope = FinanceScope(tenant_id='tenant-a', workspace_id='workspace-a', provider='elevenlabs', account_ref='fixture')
-        context = TrustedFinanceContext(scope, 'operator', lambda: True, enabled=True, environment='synthetic')
-        spec = OperationSpec(scope=scope, principal='operator', operation_kind='production', idempotency_key='fixture',
-                             request_digest=digest('request'), configuration_identity='config', budget_id='fixture',
-                             spec_sha256=digest('spec'), quote={}, slots=(SlotSpec(slot='audio', text_sha256=digest('text'), text_length=4),))
-        FinancialLedger(registry).admit(spec, authority=context)
+        # This service unit tests the external controller's ordering. Authentic
+        # SQLite/HMAC and target qualification belong to the paired reader tests.
+        # No vault installation or global Python package is borrowed by service CI.
+        (control/'provider-registry').mkdir()
+        (control/'provider-registry.key').write_bytes(b'r'*32)
+        reader = (lambda *args: object(), lambda registry: frozenset({'internal_finance_v1'}),
+                  lambda *args, **kwargs: None)
+        patched = patch.object(release, '_financial_reader', return_value=reader)
+        patched.start()
+        self.addCleanup(patched.stop)
         config = {'host': '127.0.0.1', 'provider': 'simulated', 'image': 'sha256:'+'a'*64,
                   'providerRegistryRequired': True,
                   'workspaces': [{'workspaceId': 'workspace-a', 'tenantId': 'tenant-a',
                                   'engine': {'restoreGuardDir': str(control)}}]}
         (self.root/'config.json').write_text(json.dumps(config))
-        return registry, config
+        return None, config
 
     def test_financial_check_refuses_unqualified_target_before_any_command(self):
         self.financial_state()
@@ -46,7 +46,8 @@ class RuntimeIdentityTests(unittest.TestCase):
     def test_financial_freely_written_manifest_and_compatible_flag_cannot_grant_capability(self):
         import hashlib
         import hmac
-        from voice_calibration.core.provider_registry import canonical
+        def canonical(value):
+            return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False)
         _, config = self.financial_state()
         manifest = release.load_release(self.directory)
         key = b'k'*32
@@ -66,6 +67,21 @@ class RuntimeIdentityTests(unittest.TestCase):
         (self.directory/'manifest.json').write_text(json.dumps(manifest))
         with self.assertRaisesRegex(RuntimeError, 'qualification unavailable'):
             release.financial_preflight(self.root, self.directory, {**config, 'compatible': True})
+
+    def test_financial_reader_refusal_blocks_all_target_commands(self):
+        _, config = self.financial_state()
+        manifest = release.load_release(self.directory)
+        (self.root/'secrets').mkdir()
+        (self.root/'secrets'/'financial-release-authority.key').write_bytes(b'k'*32)
+        (self.root/'financial-targets').mkdir()
+        (self.root/'financial-targets'/(manifest['runtimeHash']+'.json')).write_text('{}')
+        registry, required, _ = release._financial_reader()
+        def refuse(*args, **kwargs):
+            raise RuntimeError('trusted reader refused target')
+        with patch.object(release, '_financial_reader', return_value=(registry, required, refuse)), patch.object(release.subprocess, 'run') as run:
+            with self.assertRaisesRegex(RuntimeError, 'trusted reader refused target'):
+                release.check(self.directory)
+        run.assert_not_called()
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
