@@ -6,6 +6,9 @@ export type CalibrationEngine = Pick<CalibrationApplication, keyof CalibrationAp
 
 export interface EngineRegistration {
   workspaceId: string;
+  // Operator-owned pre-launch check of registry state and attested target.
+  // It runs before create(), including restart and feature-off operation.
+  preflight?(): Promise<void>;
   create(): Promise<CalibrationEngine>;
 }
 
@@ -16,6 +19,7 @@ export interface EngineManagerOptions {
 
 interface Slot {
   create: EngineRegistration["create"];
+  preflight: EngineRegistration["preflight"];
   facade: CalibrationEngine;
   engine?: CalibrationEngine;
   transition?: Promise<void>;
@@ -47,7 +51,7 @@ export class EngineManager {
     for (const registration of registrations) {
       assertWorkspaceId(registration.workspaceId);
       if (this.slots.has(registration.workspaceId)) throw new Error("Duplicate engine registration");
-      const slot: Slot = { create: registration.create, facade: {} as CalibrationEngine, blocked: true, active: 0 };
+      const slot: Slot = { create: registration.create, preflight: registration.preflight, facade: {} as CalibrationEngine, blocked: true, active: 0 };
       slot.facade = new Proxy({} as CalibrationEngine, {
         get: (_target, property) => {
           if (property === "then") return undefined;
@@ -173,6 +177,8 @@ export class EngineManager {
       if (this.closed) return;
       const release = await this.acquireStartup();
       try {
+        if (this.closed || slot.stopping) return;
+        await slot.preflight?.();
         if (this.closed || slot.stopping) return;
         slot.engine = await slot.create();
         slot.blocked = false;

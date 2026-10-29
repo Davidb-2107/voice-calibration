@@ -20,3 +20,22 @@ test('financial result must have complete versioned opaque binding, with legacy 
     assert.throws(() => financialResultKeys(result));
   }
 });
+
+test('financial preflight refuses before any engine creation and is rerun on restart', async () => {
+  const { EngineManager } = await import('../dist/calibration/engine-manager.js');
+  let creates = 0;
+  let allowed = false;
+  const manager = new EngineManager([{ workspaceId: 'workspace-a', preflight: async () => {
+    if (!allowed) throw new Error('financial target unattested');
+  }, create: async () => { creates++; return { close: async () => {} }; } }]);
+  try {
+    await assert.rejects(manager.start('workspace-a'), /unattested/);
+    assert.equal(creates, 0);
+    allowed = true;
+    await manager.start('workspace-a');
+    assert.equal(creates, 1);
+    allowed = false;
+    await assert.rejects(manager.restart('workspace-a'), /unattested/);
+    assert.equal(creates, 1);
+  } finally { await manager.close(); }
+});
