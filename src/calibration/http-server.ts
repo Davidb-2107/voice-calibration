@@ -311,6 +311,7 @@ async function dispatch(
         "voice",
         "text",
         "receiptId",
+        ...(action === "propose" && Object.hasOwn(payload, "financialOperationKey") ? ["financialOperationKey"] : []),
         ...(action === "propose" ? [] : ["runId", "requestDigest"]),
         ...(action === "approve" ? ["agreement"] : action === "decline" ? ["decision"] : []),
       ]
@@ -339,7 +340,7 @@ async function dispatch(
       const { action, ...payload } = body;
       if (!["propose", "inspect", "approve", "decline", "execute", "publish", "reconcile"].includes(action as string))
         throw new HttpError(400, "invalid_calibration_action", "Calibration action refused");
-      const expected =
+      let expected =
         action === "propose"
           ? "binding,request"
           : action === "approve"
@@ -347,6 +348,9 @@ async function dispatch(
             : action === "decline"
               ? "binding,decision,request,requestDigest,runId"
               : "binding,request,requestDigest,runId";
+      if (action === "propose" && Object.hasOwn(payload, "financialOperationKey")) {
+        expected = `${expected},financialOperationKey`.split(",").sort().join();
+      }
       if (Object.keys(payload).sort().join() !== expected)
         throw new HttpError(400, "invalid_calibration_scope", "Unexpected calibration fields");
       sendJson(
