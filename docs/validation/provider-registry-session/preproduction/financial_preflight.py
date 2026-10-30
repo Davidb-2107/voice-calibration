@@ -1,5 +1,6 @@
 """Trusted operator entry point. Never starts a candidate or initializes authority."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -11,9 +12,13 @@ sys.path.insert(0, str(HERE))
 from release import financial_preflight, load_release
 
 
-def verify_config(root, workspace_id=None):
+def verify_config(root, workspace_id=None, expected_config_sha256=None):
     root = Path(root).resolve()
-    config = json.loads((root / 'config.json').read_text())
+    config_bytes = (root / 'config.json').read_bytes()
+    config_hash = hashlib.sha256(config_bytes).hexdigest()
+    if expected_config_sha256 is not None and config_hash != expected_config_sha256:
+        raise RuntimeError('Operator configuration changed since composition')
+    config = json.loads(config_bytes)
     if config.get('host') != '127.0.0.1' or config.get('provider') != 'simulated':
         raise RuntimeError('Only local simulated operator configuration is supported')
     directory = Path(config['releaseDir'])
@@ -42,16 +47,18 @@ def verify_config(root, workspace_id=None):
             if path.is_symlink() or not path.is_file() or path.resolve().is_relative_to(directory.resolve()):
                 raise RuntimeError('Existing independent provider authority required')
     financial_preflight(root, directory, config={**config, 'workspaces': workspaces})
-    return {'schema': 'financial-preflight-v1', 'workspaceIds': [w['workspaceId'] for w in workspaces],
+    return {'schema': 'financial-preflight-v1', 'configSha256': config_hash,
+            'workspaceIds': [w['workspaceId'] for w in workspaces],
             'artifactSha256': manifest['runtimeHash'], 'engineImage': image}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--workspace')
+    parser.add_argument('--expected-config-sha256')
     args = parser.parse_args()
     try:
-        result = verify_config(HERE, args.workspace)
+        result = verify_config(HERE, args.workspace, args.expected_config_sha256)
     except (OSError, ValueError, KeyError, TypeError, RuntimeError) as error:
         raise SystemExit(f'Financial preflight refused: {error}') from error
     print(json.dumps(result))

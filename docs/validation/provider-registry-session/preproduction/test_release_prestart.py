@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -121,10 +122,40 @@ class InstalledPrestartTests(unittest.TestCase):
             "try { await check('workspace-a'); process.exitCode = 9; } catch { process.exitCode = 0; }\n")
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def run_service(self):
+    def replacement_authority(self):
+        control = self.root / 'replacement-control'
+        control.mkdir()
+        ProviderRegistry.initialize(control / 'provider-registry', control / 'provider-registry.key',
+                                    'workspace-a', 'tenant-a')
+        (control / 'guard.json').write_text(json.dumps({'version': 1, 'workspace_id': 'workspace-a', 'state': 'ready'}))
+        return {**self.config, 'workspaces': [{'workspaceId': 'workspace-a', 'tenantId': 'tenant-a',
+                                             'engine': {'restoreGuardDir': str(control)}}]}
+
+    def test_node_adapter_refuses_same_workspace_rebound_to_another_valid_authority(self):
+        changed = self.replacement_authority()
+        result = self.run_node("const check = createFinancialPreflight(config, root);\n"
+            "await check('workspace-a');\n"
+            f"writeFileSync(new URL('./config.json', import.meta.url), JSON.stringify({json.dumps(changed)}));\n"
+            "try { await check('workspace-a'); process.exitCode = 9; } catch { process.exitCode = 0; }\n")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # The replacement itself is valid; refusing it must bind the original composition.
+        self.assertEqual(financial_preflight.verify_config(self.root)['workspaceIds'], ['workspace-a'])
+
+    def test_control_refuses_configuration_drift_during_recovery_before_popen(self):
+        changed = self.replacement_authority()
+        with (self.root / 'recover_owner.py').open('a') as stream:
+            stream.write("def recover(config):\n"
+                         f" Path(__file__).with_name('config.json').write_text({json.dumps(json.dumps(changed))})\n"
+                         " return {'recovered': False}\n")
+        result = subprocess.run([sys.executable, str(self.root / 'control.py'), 'start'],
+                                cwd=self.root, capture_output=True, text=True, timeout=20)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / 'service.log').exists(), result.stderr)
+
+    def run_service(self, docker_body=None):
         binary = self.root / "bin/docker"
         binary.parent.mkdir(exist_ok=True)
-        binary.write_text("#!/bin/sh\nprintf 'provider-registry\\n'\n")
+        binary.write_text("#!/bin/sh\n" + (docker_body or "printf 'provider-registry\\n'\n"))
         binary.chmod(0o755)
         return subprocess.run(["node", str(self.root / "service.mjs"), str(self.root / "config.json")],
             cwd=self.root, env={**os.environ, "PATH": str(binary.parent) + os.pathsep + os.environ["PATH"]},
@@ -159,6 +190,17 @@ class InstalledPrestartTests(unittest.TestCase):
         result = self.run_service()
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(marker.exists())
+
+    @unittest.skipIf(os.name == 'nt', 'POSIX Docker metadata shim; Windows deployment remains separately qualified')
+    def test_service_wrapper_rechecks_after_docker_inspection_before_import(self):
+        marker = self.root / 'candidate-imported-during-inspection'
+        changed = ("import { writeFileSync } from 'node:fs';\n"
+                   f"writeFileSync({json.dumps(str(marker))}, 'unexpected');\n"
+                   "throw new Error('Unverified candidate was imported');\n")
+        result = self.run_service('printf %s ' + shlex.quote(changed) + ' > '
+                                  + shlex.quote(self.config['module']) + "\nprintf 'provider-registry\\n'\n")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(marker.exists(), result.stderr)
 
 
 if __name__ == "__main__":

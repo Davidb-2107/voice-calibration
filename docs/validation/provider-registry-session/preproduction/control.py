@@ -1,5 +1,6 @@
 """Operate the localhost-only simulated service without loading account credentials."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import subprocess
@@ -25,19 +26,22 @@ if automatic:
     action = 'start'
 paused = HERE / 'supervisor.pause'
 if action == 'start':
-    config = json.loads((HERE / 'config.json').read_text())
+    config_bytes = (HERE / 'config.json').read_bytes()
+    config_hash = hashlib.sha256(config_bytes).hexdigest()
+    config = json.loads(config_bytes)
     assert config['host'] == '127.0.0.1' and config['provider'] == 'simulated'
     # Kernel lock releases on supervisor death; serialize recovery and startup.
     with FileLock(str(checked(HERE / 'startup.lock')), timeout=1):
         if automatic and paused.exists():
             raise SystemExit(0)
-        preflight = [config['registryPython'], '-I', '-B', str(HERE / 'financial_preflight.py')]
+        preflight = [config['registryPython'], '-I', '-B', str(HERE / 'financial_preflight.py'),
+                     '--expected-config-sha256', config_hash]
         subprocess.run(preflight, check=True, capture_output=True, timeout=15)
         recovery = recover(config)
         subprocess.run(preflight, check=True, capture_output=True, timeout=15)
         flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0
         with (HERE / 'service.log').open('ab') as log:
-            child = subprocess.Popen(['node', str(HERE / 'service.mjs'), str(HERE / 'config.json')],
+            child = subprocess.Popen(['node', str(HERE / 'service.mjs'), str(HERE / 'config.json'), config_hash],
                 cwd=HERE, stdin=subprocess.DEVNULL, stdout=log, stderr=log, creationflags=flags)
         deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
