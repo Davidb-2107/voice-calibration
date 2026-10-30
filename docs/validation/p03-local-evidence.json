@@ -1,0 +1,81 @@
+{
+  "schema": "p03-local-validation-v1",
+  "date": "2026-10-29",
+  "evidence_root": "C:\\Users\\dbele\\AppData\\Local\\Temp\\p03-validation-pekti61d",
+  "code_commits": {
+    "vault": "5508da10a42091e5616a2ac72821e0a504b56c64",
+    "service": "68d5ee78c0c1c439b176366f8e22b6ebba98c10c"
+  },
+  "counts": {
+    "engine": {
+      "pass": 970,
+      "skip": 7
+    },
+    "launcher": {
+      "pass": 276,
+      "skip": 2
+    },
+    "financial": {
+      "pass": 79,
+      "skip": 0
+    },
+    "installed_wheel": {
+      "pass": 5,
+      "skip": 0
+    },
+    "service_bounded": {
+      "pass": 342,
+      "skip": 1,
+      "concurrency": 2
+    },
+    "browser": 1,
+    "release_unit": 28,
+    "lock_recovery": 9,
+    "qualified_reader": 5
+  },
+  "limits": [
+    "Default-concurrency service run: one historical MCP initialization timeout; isolated and bounded runs pass with unchanged deadlines.",
+    "Five source Category B skips covered by installed-wheel acceptance; native Windows boundaries and optional Neon archive remain skipped.",
+    "Native Docker source-authority test not rerun.",
+    "Real financial source qualification, installed preflight wiring and financial activation remain separate."
+  ],
+  "containers": [
+    {
+      "name": "p03-validation-pekti61d-final-attempt2",
+      "image_id": "sha256:63a3126a0d63682b40c76fd3d18bfc64403b62c66fd9675d2a7ce1f80cbe69c7",
+      "network": "none",
+      "exit": 0
+    },
+    {
+      "name": "p03-validation-pekti61d-service-final-attempt4",
+      "image_id": "sha256:484366b3edb73a91240537f5b4d17ba5f893b2e8e092f08fe5742aec6d035d6b",
+      "network": "none",
+      "exit": 1
+    },
+    {
+      "name": "p03-validation-pekti61d-category-b",
+      "image_id": "sha256:63a3126a0d63682b40c76fd3d18bfc64403b62c66fd9675d2a7ce1f80cbe69c7",
+      "network": "none",
+      "exit": 0
+    },
+    {
+      "name": "p03-validation-pekti61d-service-bounded",
+      "image_id": "sha256:484366b3edb73a91240537f5b4d17ba5f893b2e8e092f08fe5742aec6d035d6b",
+      "network": "none",
+      "exit": 0
+    }
+  ],
+  "sha256": {
+    "evidence-attempt2/commands.json": "8e79940b70e78c00c6d514ea514b03d2b76f68f2808b5b8e0c98fc1ca15ab12e",
+    "evidence-attempt2/python-source.xml": "4943c146ea56aef6a984106236b6266a1e248cfce736bea2d43fc7ee481b5b85",
+    "evidence-attempt2/python-launcher.xml": "a621fc0c872f53a2a54adee11bcda70ae8f0ed789e23d19843266028758c3fca",
+    "evidence-attempt2/installed-probe.log": "2a79dd29985ab9c5a6c2d21b8746873389867259fe720195d82f770dfd5e58ad",
+    "evidence-attempt2/pip-freeze.log": "9aedba2c83d89ee1c094d3a851e902672c0e1aab5b01583128dc6808dc0fee1b",
+    "evidence-attempt4/service-commands.json": "3b52c63fcb16c2c64f103f5edc77efd158abd7621973644b1a7262019007ba83",
+    "evidence-attempt4/service-full.log": "6f9e582b21fe576a0d8a4e4855f3b1f64a38ac3847c86c95a8a525487f859473",
+    "evidence-attempt4/service-paired-financial-preflight.log": "47b1d2c5a479e5c252e44a8c24fa730a773b9a375e6129b2dcf9d735ba44cea5",
+    "evidence-extra/service-bounded.log": "227cfe04e054eaa1488165e2de8d9a61ed4481ad8a0a784629e59203054d57eb",
+    "evidence-extra/category-b.xml": "7a46988d0643de604e53055503b600ad6ee875cb61e0f2f70c25a8b844cd4e94",
+    "evidence-extra/mcp-isolated-attempt2.log": "18ea109c2c4d1ff94443a4d2d6368ec96176a1e9eee1caddaa4652367403e81e"
+  }
+}

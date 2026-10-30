@@ -20,6 +20,7 @@ import type {
   VoiceProfile,
 } from "./domain.js";
 import { assertWorkspaceId, transitionRun } from "./domain.js";
+import { validateFinancialRequest, validateFinancialResponse } from "./financial-contract.js";
 import { fingerprintRequest } from "./fingerprint.js";
 import type { LocalStore } from "./ports.js";
 import { ConflictError, type VoiceDirectoryPort } from "./ports.js";
@@ -954,6 +955,7 @@ export class CalibrationApplication {
     action: "propose" | "inspect" | "approve" | "decline" | "execute" | "publish" | "reconcile",
     payload: Record<string, unknown>,
   ) {
+    validateFinancialRequest(action, payload);
     assertWorkspaceId(workspaceId);
     assertWorkspaceId(identity.userId);
     assertWorkspaceId(identity.tenantId);
@@ -987,6 +989,7 @@ export class CalibrationApplication {
       JSON.stringify(b, (_key, item) =>
         isRecord(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item,
       );
+    const financialKeys = validateFinancialResponse(action, payload, result);
     const snapshot = result.snapshot;
     const request = result.request;
     const settings = isRecord(request) ? request.voice_settings : null;
@@ -995,7 +998,8 @@ export class CalibrationApplication {
       Object.keys(result).sort().join() !==
         (
           "approval,binding,configurationIdentity,estimate,productionReady,providerMode,request,requestDigest,result,runId,schema,snapshot,status,warning" +
-          (Object.hasOwn(result, "spending") ? ",spending" : "")
+          (Object.hasOwn(result, "spending") ? ",spending" : "") +
+          financialKeys.map((key) => `,${key}`).join("")
         )
           .split(",")
           .sort()
@@ -1122,6 +1126,7 @@ export class CalibrationApplication {
     action: "propose" | "inspect" | "approve" | "decline" | "execute" | "reconcile",
     payload: Record<string, unknown>,
   ) {
+    validateFinancialRequest(action, payload);
     assertWorkspaceId(workspaceId);
     assertWorkspaceId(identity.userId);
     assertWorkspaceId(identity.tenantId);
@@ -1152,11 +1157,27 @@ export class CalibrationApplication {
         "Production refused: consent, verified budget or receipt unavailable; no automatic retry",
       );
     }
+    const financialKeys = validateFinancialResponse(action, payload, result);
     const estimate = result.estimate;
     const budget = isRecord(estimate) ? estimate.budget : undefined;
     if (
       Object.keys(result).sort().join() !==
-        "approval,binding,estimate,production,productionReady,requestDigest,runId,schema,spending,status,warning" ||
+        [
+          "approval",
+          "binding",
+          "estimate",
+          "production",
+          "productionReady",
+          "requestDigest",
+          "runId",
+          "schema",
+          "spending",
+          "status",
+          "warning",
+          ...financialKeys,
+        ]
+          .sort()
+          .join() ||
       result.schema !== "project-production-consent-v2" ||
       !same(result.binding, binding) ||
       result.productionReady !== false ||

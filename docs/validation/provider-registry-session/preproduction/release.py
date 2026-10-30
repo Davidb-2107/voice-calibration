@@ -89,8 +89,51 @@ def require_gates(directory, evidence):
     return manifest
 
 
+def _financial_reader():
+    from voice_calibration.core.provider_registry import ProviderRegistry
+    from voice_calibration.core.financial_compatibility import check_target, required_capabilities
+    return ProviderRegistry, required_capabilities, check_target
+
+
+def financial_preflight(root, directory, config=None):
+    """Runs in the trusted control interpreter, before loading any target code.
+
+    Never import this guard from the candidate's Python environment. Its reader
+    and release-authority key belong to independent control, outside the target.
+    """
+    config_path = root/'config.json'
+    if config is None:
+        if not config_path.exists():
+            return  # isolated legacy harness with no registered workspaces
+        config = json.loads(config_path.read_text())
+    manifest = load_release(directory)
+    for workspace in config.get('workspaces', []):
+        control = Path(workspace['engine']['restoreGuardDir'])
+        registry_dir, registry_key = control/'provider-registry', control/'provider-registry.key'
+        if not registry_dir.exists() and not registry_key.exists() and not config.get('providerRegistryRequired'):
+            continue
+        ProviderRegistry, required_capabilities, check_target = _financial_reader()
+        registry = ProviderRegistry(registry_dir, registry_key, workspace['workspaceId'], workspace['tenantId'])
+        if not required_capabilities(registry):
+            continue
+        # Root-owned key and reports are independent from candidate reports and
+        # the freely writable candidate manifest. No compatible=true escape.
+        key_path = root/'secrets'/'financial-release-authority.key'
+        proof_path = root/'financial-targets'/(manifest['runtimeHash']+'.json')
+        if key_path.is_symlink() or proof_path.is_symlink():
+            raise RuntimeError('Linked financial release authority is forbidden')
+        try:
+            trust_key = key_path.read_bytes()
+            attestation = json.loads(proof_path.read_text())
+        except (OSError, ValueError) as error:
+            raise RuntimeError('Financial target qualification unavailable; do not start') from error
+        check_target(registry, artifact_sha256=manifest['runtimeHash'], engine_image=config.get('image'),
+                     attestation=attestation, trust_key=trust_key)
+
+
 def check(directory):
     manifest = load_release(directory)
+    financial_preflight(directory.parent.parent, directory)
     source = Path(manifest['source'])
     if runtime_fingerprint(source)!=manifest['runtimeHash']:
         raise RuntimeError('Working build differs from immutable release')
@@ -129,6 +172,7 @@ def activate(root,directory,evidence):
     manifest=require_gates(directory,evidence)
     config=json.loads((root/'config.json').read_text())
     if config['host']!='127.0.0.1' or config['provider']!='simulated':raise RuntimeError('Only private simulated preproduction')
+    financial_preflight(root, directory, config)
     subprocess.run([sys.executable,str(root/'control.py'),'stop'],check=True,capture_output=True,timeout=100)
     locations,before=protected(config,root)
     backup=root/'backups'/('release-'+uuid.uuid4().hex);backup.mkdir()
@@ -141,6 +185,7 @@ def activate(root,directory,evidence):
     installer.HERE=root
     installer.install(candidate)
     if protected(candidate,root)[1]!=before:raise RuntimeError('Protected data changed before startup')
+    financial_preflight(root, directory, candidate)
     subprocess.run([sys.executable,str(root/'control.py'),'start'],check=True,capture_output=True,timeout=100)
     with urllib.request.urlopen(f"http://127.0.0.1:{config['healthPort']}/healthz",timeout=30) as response:health=json.load(response)
     if health['status']!='ready' or health['commit']!=manifest['releaseId'] or not health['providerRegistry']['valid']:
@@ -169,6 +214,7 @@ def status(root):
         raise RuntimeError('Active configuration differs from validated release')
     evidence=Path(cfg['validationReport'])
     require_gates(directory,evidence)
+    financial_preflight(root, directory, cfg)
     return {'releaseId':manifest['releaseId'],'module':manifest['module'],
             'evidence':str(evidence),'committed':manifest['committed']}
 
