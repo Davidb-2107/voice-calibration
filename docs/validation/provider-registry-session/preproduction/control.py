@@ -31,7 +31,10 @@ if action == 'start':
     with FileLock(str(checked(HERE / 'startup.lock')), timeout=1):
         if automatic and paused.exists():
             raise SystemExit(0)
+        preflight = [config['registryPython'], '-I', '-B', str(HERE / 'financial_preflight.py')]
+        subprocess.run(preflight, check=True, capture_output=True, timeout=15)
         recovery = recover(config)
+        subprocess.run(preflight, check=True, capture_output=True, timeout=15)
         flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0
         with (HERE / 'service.log').open('ab') as log:
             child = subprocess.Popen(['node', str(HERE / 'service.mjs'), str(HERE / 'config.json')],
