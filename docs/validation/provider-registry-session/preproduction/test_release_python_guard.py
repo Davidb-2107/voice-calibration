@@ -107,7 +107,7 @@ class OperatorRuntimeTests(unittest.TestCase):
 
     @unittest.skipUnless(PY311, 'Explicit disposable Python 3.11 runtime required')
     def test_python311_is_refused_before_operator_business_imports_or_start(self):
-        for entry in ['boot_watchdog.py', 'control.py', 'watchdog.py', 'financial_preflight.py', 'release.py', 'provider_registry_status.py']:
+        for entry in ['boot_watchdog.py', 'control.py', 'watchdog.py', 'financial_preflight.py', 'release.py', 'provider_registry_status.py', 'windows_candidate.py']:
             with self.subTest(entry=entry), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 shutil.copyfile(HERE / entry, root / entry)

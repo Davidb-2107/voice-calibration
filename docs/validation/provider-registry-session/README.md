@@ -14,11 +14,33 @@ figé. Copier seulement un script sans ce module ne constitue pas une mise à jo
 valide. Le diagnostic de registre utilise le SDK `voice_calibration` qualifié,
 sans dépendre d'un module `application` externe à cette archive.
 
-La qualification Windows reste défavorable : le contexte de lancement courant
-ne sépare pas opérateur et candidat, et le lanceur MCP natif gardé reste à livrer.
-Aucune modification de l'installation ou de ses droits n'est autorisée par ces
-correctifs. La sauvegarde opérationnelle vérifiée doit précéder toute intervention
-installée ; la bascule exige un accord distinct.
+Le premier bilan Windows du 31 octobre était défavorable. Le correctif isolé
+`preproduction/windows_candidate.py` fournit désormais une route AppContainer
+dédiée : code en lecture/exécution, état privé modifiable, autorité séparée et
+clé inaccessible au candidat. Le compte hôte est partagé ; le SID applicatif,
+l'intégrité basse et les accès effectifs sont contrôlés dans le vrai jeton.
+
+L'opérateur crée un dossier neuf via `WindowsCandidate.create`, y prépare les
+binaires et dépendances privés, puis qualifie une commande fixe avec `qualify`.
+Exécutable et script d'entrée doivent appartenir au code figé. Python utilise
+`-I -B` ; Node utilise `--preserve-symlinks --preserve-symlinks-main`, sans reparse
+point dans l'arbre. Aucun chargement de code depuis l'état modifiable.
+
+Chaque connexion utilise la même route, sans création ou réparation implicite :
+`<Python opérateur 3.12> -I -B windows_candidate.py run <dossier qualifié>`.
+`WindowsCandidate.open` vérifie les protections et la qualification existantes.
+Le lancement recontrôle signature, empreintes et ACL, garde les fichiers ouverts
+sans partage en écriture/suppression, crée le processus suspendu, vérifie son
+identité AppContainer et reprend seulement ce jeton. Les seuls handles hérités
+sont les trois pipes stdio. Aucun repli vers un processus ordinaire.
+
+Ce manifeste atteste le code ; il ne signe aucun montant ni état financier et
+ne remplace pas le lecteur financier indépendant P0.3. La qualification du MCP
+isolé ne vaut pas branchement de l'API installée. Aucun changement installé,
+exception réseau ou activation financière. Les nouveaux profils et fixtures
+restent conservés. Sauvegarde opérationnelle vérifiée juste avant intervention
+autorisée, puis bascule après accord distinct. Le bilan correspondant est dans
+le vault, `docs/superpowers/plans/2026-10-31-p03-windows-isolation.md`.
 
 Activation d'une release locale ou ajout d'un workspace : consulter [preproduction/RELEASES.md](preproduction/RELEASES.md) et utiliser le contrat explicite `release.py`.
 
