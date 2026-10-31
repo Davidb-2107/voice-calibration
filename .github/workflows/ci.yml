@@ -49,14 +49,77 @@ jobs:
       - name: First activation on served HTML
         run: npm run test:browser
 
-      - name: Publication and release evidence checks
-        run: python3 -m unittest discover -s docs/validation/provider-registry-session/preproduction -p 'test_release*.py'
+      - name: Require private SDK read access
+        env:
+          VAULT_READ_TOKEN: ${{ secrets.VOICE_CALIBRATION_VAULT_READ_TOKEN }}
+        run: |
+          if [ -z "$VAULT_READ_TOKEN" ]; then
+            echo "::error::Configure VOICE_CALIBRATION_VAULT_READ_TOKEN with contents:read on Wiki_Claude."
+            exit 1
+          fi
 
-      - name: Install recovery regression dependencies
-        run: python3 -m pip install pytest
+      - name: Checkout qualified Python SDK
+        uses: actions/checkout@v4
+        with:
+          repository: Davidb-2107/Wiki_Claude
+          ref: 027f6af88f852ea5c7e2832035fbcc0142c5ac7f
+          token: ${{ secrets.VOICE_CALIBRATION_VAULT_READ_TOKEN }}
+          persist-credentials: false
+          path: .scratch/ci-sdk
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /Shared/tiktok-spec/
+            /Shared/voice-calibration/
+
+      - name: Setup Python 3.11 refusal peer
+        id: python311
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup Python 3.14 refusal peer
+        id: python314
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: Setup qualified operator Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.10'
+
+      - name: Install declared operator validation dependencies in a fresh venv
+        run: |
+          python -m venv --copies "$RUNNER_TEMP/p03-operator"
+          python -m venv --copies --without-pip "$RUNNER_TEMP/p03-peer312"
+          "$RUNNER_TEMP/p03-operator/bin/python" -m pip install --no-cache-dir -r requirements-ci.txt
+          "$RUNNER_TEMP/p03-operator/bin/python" -m pip check
+
+      - name: Publication and release evidence checks
+        env:
+          P03_PY311: ${{ steps.python311.outputs.python-path }}
+          P03_PY314: ${{ steps.python314.outputs.python-path }}
+          P03_PEER_PY312: ${{ runner.temp }}/p03-peer312/bin/python
+          P03_RUNTIME_RECORD_DIR: ${{ runner.temp }}/p03-runtime-evidence
+        run: |
+          test -x "$P03_PY311"
+          test -x "$P03_PY314"
+          test -x "$P03_PEER_PY312"
+          "$RUNNER_TEMP/p03-operator/bin/python" -I -B -m unittest discover \
+            -s docs/validation/provider-registry-session/preproduction -p 'test_release*.py' -v
 
       - name: Recovery guards for preparation and publication locks
-        run: python3 -m pytest docs/validation/provider-registry-session/preproduction/test_new_lock_recovery.py -q
+        run: >-
+          "$RUNNER_TEMP/p03-operator/bin/python" -I -B -m pytest
+          docs/validation/provider-registry-session/preproduction/test_new_lock_recovery.py -q
+
+      - name: Preserve interpreter refusal evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p03-runtime-evidence
+          path: ${{ runner.temp }}/p03-runtime-evidence
+          if-no-files-found: ignore
 
   secrets-scan:
     name: Secrets scan

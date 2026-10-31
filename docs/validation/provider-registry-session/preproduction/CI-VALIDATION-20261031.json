@@ -1,0 +1,336 @@
+{
+  "schema": "p03-service-ci-python312-v1",
+  "date": "2026-10-31",
+  "service_base": "bda6cb44a990629ec987001e0fcffb18f7a5c4d4",
+  "sdk_revision": "027f6af88f852ea5c7e2832035fbcc0142c5ac7f",
+  "sdk_archive_sha256": "a35e7e84e03725b226c1c03a5bfb4fa42e62becb264b5facd8e74bbc817804ff",
+  "qualified_input_hashes": {
+    ".github/workflows/ci.yml": "f0c1001c9226f2d837127058e39c8c7ca474a5387bb5dc2def0cb32c757aad0c",
+    ".gitignore": "f2763dece893715b47a34a88d55b454796608d2dde7089194f5914d6a741718c",
+    "requirements-ci.txt": "b0e94581a2f64f4918f2b876d996d6d5db131ac0d38164f6db84fd84433102bb",
+    "docs/validation/provider-registry-session/preproduction/RELEASES.md": "5134e66ee728d2eed1c8699bed94a94dbdb29a730c16b7f1c0a598d8d7480d95",
+    "docs/validation/provider-registry-session/preproduction/test_release_python_guard.py": "fec7730c738a5805b3bf24d92ae242a602523294c6b3289800e3739c58be659b",
+    "docs/validation/provider-registry-session/preproduction/test_release_runtime.py": "967e5dc594dc48be2918e079c6f839a2bd30d3573156977326a440b38597ebc4"
+  },
+  "summary": {
+    "python": "3.12.10 (main, May 21 2025, 23:34:56) [GCC 12.2.0]",
+    "executable": "/tmp/p03-operator/bin/python",
+    "packages": {
+      "voice-calibration": "0.2.0",
+      "tiktok-spec": "0.1.0",
+      "pytest": "9.1.1"
+    },
+    "required_runtime_observations": 22,
+    "checks_passed": 7,
+    "provider_calls": 0,
+    "installed_changes": false,
+    "network": "none"
+  },
+  "interpreters": {
+    "operator": {
+      "version": [
+        3,
+        12,
+        10
+      ],
+      "executable": "/tmp/p03-operator/bin/python"
+    },
+    "refusal311": {
+      "version": [
+        3,
+        11,
+        9
+      ],
+      "executable": "/opt/refusal311/bin/python3.11"
+    },
+    "refusal314": {
+      "version": [
+        3,
+        14,
+        0
+      ],
+      "executable": "/opt/refusal314/bin/python3.14"
+    },
+    "peer312": {
+      "version": [
+        3,
+        12,
+        10
+      ],
+      "executable": "/tmp/p03-peer312/bin/python"
+    },
+    "node": "v22.23.4"
+  },
+  "venv_before": {
+    "executable": "/tmp/p03-operator/bin/python",
+    "version": "3.12.10 (main, May 21 2025, 23:34:56) [GCC 12.2.0]",
+    "prefix": "/tmp/p03-operator",
+    "base_prefix": "/usr/local",
+    "sys_path": [
+      "/usr/local/lib/python312.zip",
+      "/usr/local/lib/python3.12",
+      "/usr/local/lib/python3.12/lib-dynload",
+      "/tmp/p03-operator/lib/python3.12/site-packages"
+    ],
+    "packages": [
+      {
+        "name": "pip",
+        "version": "25.0.1"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "command": [
+        "npx",
+        "biome",
+        "ci",
+        "."
+      ],
+      "exit_code": 0,
+      "log": "check-0.log"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "exit_code": 0,
+      "log": "check-1.log"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "exit_code": 0,
+      "log": "check-2.log"
+    },
+    {
+      "command": [
+        "npm",
+        "test"
+      ],
+      "exit_code": 0,
+      "log": "check-3.log"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "test:browser"
+      ],
+      "exit_code": 0,
+      "log": "check-4.log"
+    },
+    {
+      "command": [
+        "/tmp/p03-operator/bin/python",
+        "-I",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "docs/validation/provider-registry-session/preproduction",
+        "-p",
+        "test_release*.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "log": "check-5.log"
+    },
+    {
+      "command": [
+        "/tmp/p03-operator/bin/python",
+        "-I",
+        "-B",
+        "-m",
+        "pytest",
+        "docs/validation/provider-registry-session/preproduction/test_new_lock_recovery.py",
+        "-q"
+      ],
+      "exit_code": 0,
+      "log": "check-6.log"
+    }
+  ],
+  "container": {
+    "command": [
+      "docker",
+      "run",
+      "--network=none",
+      "--name",
+      "p03-service-ci-repair-8fc08bfe6624489990fe92c53e483963",
+      "p03-service-ci-repair-linux:20261031"
+    ],
+    "container_retained": "p03-service-ci-repair-8fc08bfe6624489990fe92c53e483963",
+    "network": "none",
+    "exit_code": 0,
+    "image_id": "sha256:1a5489706bd69dd034feda7e6da3de452ab6d55f2f47e5d07b160f1eff821bb8"
+  },
+  "installed_packages": [
+    "annotated-types==0.8.0",
+    "anyio==4.14.2",
+    "attrs==26.1.0",
+    "certifi==2026.10.23",
+    "cffi==2.1.1",
+    "charset-normalizer==3.5.2",
+    "click==8.5.0",
+    "cryptography==50.0.2",
+    "filelock==3.32.0",
+    "h11==0.16.0",
+    "httpcore==1.0.9",
+    "httpx==0.28.1",
+    "httpx-sse==0.4.3",
+    "idna==3.20",
+    "iniconfig==2.3.1",
+    "jsonschema==4.26.0",
+    "jsonschema-specifications==2025.9.1",
+    "mcp==1.29.0",
+    "packaging==26.3",
+    "pip==25.0.1",
+    "pluggy==1.7.0",
+    "pycparser==3.12",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.15.0",
+    "pydantic_core==2.46.4",
+    "Pygments==2.21.0",
+    "PyJWT==2.15.1",
+    "pytest==9.1.1",
+    "python-dotenv==1.2.4",
+    "python-multipart==0.0.33",
+    "referencing==0.37.0",
+    "requests==2.34.2",
+    "rpds-py==2026.9.1",
+    "sse-starlette==3.4.8",
+    "starlette==1.5.0",
+    "tiktok-spec @ file:///service/.scratch/ci-sdk/Shared/tiktok-spec",
+    "typing-inspection==0.4.4",
+    "typing_extensions==4.16.0",
+    "urllib3==2.8.0",
+    "uvicorn==0.51.0",
+    "voice-calibration @ file:///service/.scratch/ci-sdk/Shared/voice-calibration"
+  ],
+  "logs_sha256": {
+    "installed.txt": "f3bfbb36dcd73edcd87c7aaeb627503972493b68f2a25f6caec8c66e72a826f8",
+    "venv-before.json": "a3072c4e1f7c84d2ad9fc414f720f71751fb2ee7af98f31e5f54e53b388c6d8f",
+    "check-0.log": "4c39c5e6db267d2c01c344f6dfb513075daf1e308443c0783b296fdadd4e4e23",
+    "check-1.log": "98489412f6d996a7f683ee09d13dc3a257c24a9aef948dde0c283f40e552ad62",
+    "check-2.log": "8a52a043c67bfaaf420ac418841f856aac23bac82475a041ef87a71c26710151",
+    "check-3.log": "b0b884c33b1a74584915c04500eef90c41b8b901c974135d9a28d80f7cb638ec",
+    "check-4.log": "1efd83d45825f389e4a7322a106bfbfce5c8a34976c4e75dcb650bbc81811dd1",
+    "check-5.log": "01779dbb5f2acce36b6dda5c65352956c3406e14cab86736e1780a9fb02461ce",
+    "check-6.log": "b51743e160b9f22955c186bf0bd4652cc6c9aa619f8f5fb06fae20a8db91e5b0"
+  },
+  "node_counts": {
+    "total": 346,
+    "passed": 334,
+    "skipped": 12,
+    "failed": 0
+  },
+  "node_skips": [
+    "﹣ financial proposal across actual HTTP/MCP, mode true (0.977687ms) # SKIP",
+    "﹣ financial proposal across actual HTTP/MCP, mode false (0.539763ms) # SKIP",
+    "﹣ real HTTP/MCP named instances isolate proposals, enforce ownership and resume (3.975064ms) # SKIP",
+    "﹣ private calibration publish -> explicit launcher selection -> prediction, fake provider only (1.923162ms) # SKIP",
+    "﹣ launcher consent through authenticated HTTP/MCP, server mode elevenlabs (8.149134ms) # SKIP",
+    "﹣ launcher consent through authenticated HTTP/MCP, server mode simulated (3.179668ms) # SKIP",
+    "﹣ real launcher, authenticated HTTP, bridge and MCP isolate production, CUT observations and recovery (1.098697ms) # SKIP",
+    "﹣ launcher revokes reuse, recovers proved audio once and blocks uncertain audio (3.065874ms) # SKIP",
+    "﹣ real-mode consent, signed production receipt and 1/0 via launcher HTTP MCP, fake provider only (4.573764ms) # SKIP",
+    "﹣ native Docker source authority and private preparations survive restart without granting source-data access (5.848694ms) # SKIP",
+    "﹣ authenticated HTTP to real MCP: explicit publication, member refusal, private metadata and revocation (8.453517ms) # SKIP",
+    "﹣ real legacy engine attests compatibility without gaining publication or reuse rights (0.753645ms) # SKIP"
+  ],
+  "python_counts": {
+    "publication_passed": 51,
+    "publication_skipped": 0,
+    "recovery_passed": 9,
+    "recovery_skipped": 0
+  },
+  "observations": {
+    "reject311-control.py": {
+      "exit_code": 1,
+      "business_imported": false,
+      "service_started": false,
+      "interpreter_sha256": "8219d0acbf6e1b78e322a221c438244034afc7d8c9d08b68019ba320de50afbb",
+      "interpreter_version": "Python 3.11.9"
+    },
+    "reject314-control.py": {
+      "exit_code": 1,
+      "business_imported": false,
+      "service_started": false,
+      "interpreter_sha256": "3fbc4d6c766a7a5d56c4bcc80d3325181a05f1b64596eb7cf622f0ec056dd546",
+      "interpreter_version": "Python 3.14.0"
+    },
+    "node-reject311": {
+      "exit_code": 1,
+      "business_imported": false,
+      "interpreter_sha256": "8219d0acbf6e1b78e322a221c438244034afc7d8c9d08b68019ba320de50afbb",
+      "interpreter_version": "Python 3.11.9"
+    },
+    "node-reject314": {
+      "exit_code": 1,
+      "business_imported": false,
+      "interpreter_sha256": "3fbc4d6c766a7a5d56c4bcc80d3325181a05f1b64596eb7cf622f0ec056dd546",
+      "interpreter_version": "Python 3.14.0"
+    },
+    "accept312-reader": {
+      "exit_code": 0,
+      "expected_interpreter": "/tmp/p03-operator/bin/python",
+      "verdict": {
+        "schema": "financial-preflight-v1",
+        "configSha256": "ccd21d8073eb48082aadec66231a464ff51ade6935ba056d7486381ce8b838dc",
+        "operatorPython": "/tmp/p03-operator/bin/python",
+        "operatorVersion": [
+          3,
+          12,
+          10
+        ],
+        "workspaceIds": [
+          "workspace-a"
+        ],
+        "artifactSha256": "324976986d7a7da929ff33019c3fb3dc4b6d8a495bddcb20138c526f94a34f53",
+        "engineImage": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "interpreter_sha256": "4dbf3143240288fb2170257ffaa7bd030cdda5d2703d1f5f30b627042267e2e3",
+      "interpreter_version": "Python 3.12.10"
+    },
+    "reject-different312": {
+      "exit_code": 1,
+      "configured_peer": "/tmp/p03-peer312/bin/python",
+      "recovery_called": false,
+      "service_started": false,
+      "interpreter_sha256": "4dbf3143240288fb2170257ffaa7bd030cdda5d2703d1f5f30b627042267e2e3",
+      "interpreter_version": "Python 3.12.10"
+    },
+    "status-reject-different312": {
+      "caller_python": "/tmp/p03-operator/bin/python",
+      "configured_peer": "/tmp/p03-peer312/bin/python",
+      "exception_type": "RuntimeError",
+      "error": "Configuration must use the same operator interpreter",
+      "authority_read": false,
+      "installed_changes": false
+    },
+    "activation-reject-different312": {
+      "operation": "release.activate",
+      "caller_python": "/tmp/p03-operator/bin/python",
+      "configured_peer": "/tmp/p03-peer312/bin/python",
+      "exception_type": "RuntimeError",
+      "error": "Configuration must use the same operator interpreter",
+      "stop_called": false,
+      "installed_changes": false
+    }
+  },
+  "remote_ci_at_commit": "Pending publication and private SDK read token; not claimed green",
+  "limits": [
+    "Linux reproduction with exact service blobs and scoped changes. Windows qualified runtime code is unchanged.",
+    "Private SDK checked out from exact local Git archive; remote sparse checkout authorization needs dedicated read token.",
+    "Only pip25.0.1 in fresh venv before declared noneditable installation; no global SDK or existing venv borrowed.",
+    "Runtime test phase network none; package/browser installation network restricted to disposable image preparation.",
+    "12 Node skips are existing conditional integrations, distinct from the three Windows POSIX tests which all run in this51-test Linux suite.",
+    "No merge, installed changes, real keys, provider calls, financial activation, backup or cleanup."
+  ]
+}

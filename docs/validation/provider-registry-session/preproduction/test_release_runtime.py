@@ -14,7 +14,7 @@ class RuntimeIdentityTests(unittest.TestCase):
         control.mkdir(parents=True)
         # This service unit tests the external controller's ordering. Authentic
         # SQLite/HMAC and target qualification belong to the paired reader tests.
-        # No vault installation or global Python package is borrowed by service CI.
+        # CI installs its declared SDK in a fresh venv, never a vault installation.
         (control/'provider-registry').mkdir()
         (control/'provider-registry.key').write_bytes(b'r'*32)
         reader = (lambda *args: object(), lambda registry: frozenset({'internal_finance_v1'}),
