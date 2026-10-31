@@ -1,16 +1,13 @@
 """Stage, verify and activate one immutable local simulated API release."""
 import sys
-
-if __name__ == '__main__':
-    from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    import operator_runtime
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from operator_runtime import operator_python
 
 import argparse
 from datetime import datetime, timezone
 import hashlib
 import json
-from pathlib import Path
 import shutil
 import subprocess
 import urllib.request
@@ -178,7 +175,6 @@ def activate(root,directory,evidence):
     manifest=require_gates(directory,evidence)
     config=json.loads((root/'config.json').read_text())
     if config['host']!='127.0.0.1' or config['provider']!='simulated':raise RuntimeError('Only private simulated preproduction')
-    from operator_runtime import operator_python
     operator_python(config)
     financial_preflight(root, directory, config)
     subprocess.run([sys.executable,str(root/'control.py'),'stop'],check=True,capture_output=True,timeout=100)

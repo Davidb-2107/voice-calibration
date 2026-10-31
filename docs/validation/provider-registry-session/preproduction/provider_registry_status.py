@@ -3,13 +3,14 @@ import json
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import operator_runtime
+from operator_runtime import operator_python
 from voice_calibration.core.provider_registry import ProviderRegistry, ProviderRegistryBlocked
 
 
 def verify(config):
     if not config.get('providerRegistryRequired'):
         return {'valid': False, 'reason': 'provider_registry_required'}
+    operator_python(config)
     try:
         for workspace in config['workspaces']:
             control = Path(workspace['engine']['restoreGuardDir'])

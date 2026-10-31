@@ -27,6 +27,52 @@ def record_runtime_case(name, command, result, **observations):
 
 
 class OperatorRuntimeTests(unittest.TestCase):
+    @unittest.skipUnless(PY311, 'Explicit disposable Python 3.11 runtime required')
+    def test_imported_release_refuses_python311_before_business_modules(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ('release.py', 'operator_runtime.py'):
+                shutil.copyfile(HERE/name, root/name)
+            marker = root/'business-imported'
+            poison = f'from pathlib import Path\nPath({str(marker)!r}).write_text("business")\nraise RuntimeError("BUSINESS IMPORTED")\n'
+            for name in ('install_provider_registry.py', 'restore.py'):
+                (root/name).write_text(poison)
+            bootstrap = root/'probe.py'
+            bootstrap.write_text(f'import sys\nsys.path.insert(0,{str(root)!r})\nimport release\n')
+            command = [PY311, '-B', str(bootstrap)]
+            result = subprocess.run(command, capture_output=True, text=True, timeout=15)
+            record_runtime_case('reject311-release-library', command, result,
+                                business_imported=marker.exists())
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('requires Python 3.12', result.stderr)
+            self.assertFalse(marker.exists(), result.stderr)
+
+    def test_registry_reader_rejects_another_interpreter_before_reading_authority(self):
+        import provider_registry_status as status
+        peer = os.environ.get('P03_PEER_PY312')
+        if not peer:
+            self.skipTest('Explicit disposable second Python 3.12 runtime required')
+        config = {'providerRegistryRequired': True, 'registryPython': peer,
+                  'workspaces': [{'workspaceId': 'workspace-a', 'tenantId': 'tenant-a',
+                                  'engine': {'restoreGuardDir': str(HERE/'unused-synthetic-authority')}}]}
+        error = None
+        with patch.object(status, 'ProviderRegistry') as registry:
+            try:
+                status.verify(config)
+            except Exception as observed:
+                error = observed
+            evidence = os.environ.get('P03_RUNTIME_RECORD_DIR')
+            if evidence:
+                target = Path(evidence)
+                target.mkdir(parents=True, exist_ok=True)
+                data = {'caller_python': sys.executable, 'configured_peer': peer,
+                        'exception_type': type(error).__name__, 'error': str(error),
+                        'authority_read': registry.called, 'installed_changes': False}
+                (target/'status-reject-different312.json').write_text(json.dumps(data, indent=2)+'\n')
+            self.assertIsInstance(error, RuntimeError)
+            self.assertIn('same operator interpreter', str(error))
+            registry.assert_not_called()
+
     def test_activation_rejects_another_interpreter_before_stopping_service(self):
         from test_release_prestart import InstalledPrestartTests
         import release
