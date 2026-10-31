@@ -4,11 +4,14 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from operator_runtime import operator_python
 
 HERE = Path(__file__).resolve().parent
 
 def environment(root):
     config = json.loads((root / 'config.json').read_text())
+    interpreter = operator_python(config)
     if config['host'] != '127.0.0.1' or config['provider'] != 'simulated':
         raise RuntimeError('Boot supervision is limited to local simulated preproduction')
     runtime = json.loads((root / 'boot-runtime.json').read_text())
@@ -18,7 +21,7 @@ def environment(root):
         if not executable.is_absolute() or not executable.is_file():
             raise RuntimeError('Declared boot runtime unavailable: ' + name)
         directories.append(str(executable.parent))
-    if Path(runtime['python']).resolve() != Path(sys.executable).resolve():
+    if Path(runtime['python']).resolve() != Path(interpreter).resolve():
         raise RuntimeError('Unexpected Python boot runtime')
     return {**os.environ, 'PATH': os.pathsep.join([*directories, os.environ.get('PATH', '')]),
             'DOCKER_CONFIG': runtime['dockerConfig']}

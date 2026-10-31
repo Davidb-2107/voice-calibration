@@ -67,7 +67,7 @@ def restore(config, backup, manifest):
         if config.get('providerRegistryRequired') or (control / 'provider-registry').exists():
             if not control.is_relative_to(recovery) or not re.fullmatch(r'[a-z0-9][a-z0-9_-]*', workspace['workspaceId']):
                 raise RuntimeError('Invalid independent provider snapshot destination')
-            from application.provider_registry import ProviderRegistry
+            from voice_calibration.core.provider_registry import ProviderRegistry
             registry = ProviderRegistry(control / 'provider-registry', control / 'provider-registry.key',
                                         workspace['workspaceId'], workspace['tenantId'])
             snapshot = recovery / (operation + '.' + workspace['workspaceId'] + '.provider.sqlite3')

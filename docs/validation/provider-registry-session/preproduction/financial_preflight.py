@@ -9,6 +9,7 @@ import sys
 HERE = Path(__file__).resolve().parent
 # -I ignores the candidate's CWD/PYTHONPATH; only this trusted control directory is added.
 sys.path.insert(0, str(HERE))
+from operator_runtime import operator_python
 from release import financial_preflight, load_release
 
 
@@ -19,6 +20,7 @@ def verify_config(root, workspace_id=None, expected_config_sha256=None):
     if expected_config_sha256 is not None and config_hash != expected_config_sha256:
         raise RuntimeError('Operator configuration changed since composition')
     config = json.loads(config_bytes)
+    interpreter = operator_python(config)
     if config.get('host') != '127.0.0.1' or config.get('provider') != 'simulated':
         raise RuntimeError('Only local simulated operator configuration is supported')
     directory = Path(config['releaseDir'])
@@ -48,6 +50,7 @@ def verify_config(root, workspace_id=None, expected_config_sha256=None):
                 raise RuntimeError('Existing independent provider authority required')
     financial_preflight(root, directory, config={**config, 'workspaces': workspaces})
     return {'schema': 'financial-preflight-v1', 'configSha256': config_hash,
+            'operatorPython': interpreter, 'operatorVersion': list(sys.version_info[:3]),
             'workspaceIds': [w['workspaceId'] for w in workspaces],
             'artifactSha256': manifest['runtimeHash'], 'engineImage': image}
 

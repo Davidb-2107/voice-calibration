@@ -7,6 +7,8 @@ import subprocess
 import sys
 import time
 import urllib.request
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from operator_runtime import operator_python
 from filelock import FileLock
 from recover_owner import checked, recover
 
@@ -29,12 +31,13 @@ if action == 'start':
     config_bytes = (HERE / 'config.json').read_bytes()
     config_hash = hashlib.sha256(config_bytes).hexdigest()
     config = json.loads(config_bytes)
+    interpreter = operator_python(config)
     assert config['host'] == '127.0.0.1' and config['provider'] == 'simulated'
     # Kernel lock releases on supervisor death; serialize recovery and startup.
     with FileLock(str(checked(HERE / 'startup.lock')), timeout=1):
         if automatic and paused.exists():
             raise SystemExit(0)
-        preflight = [config['registryPython'], '-I', '-B', str(HERE / 'financial_preflight.py'),
+        preflight = [interpreter, '-I', '-B', str(HERE / 'financial_preflight.py'),
                      '--expected-config-sha256', config_hash]
         subprocess.run(preflight, check=True, capture_output=True, timeout=15)
         recovery = recover(config)

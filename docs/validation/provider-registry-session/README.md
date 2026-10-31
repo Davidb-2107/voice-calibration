@@ -1,5 +1,25 @@
 # Sources et preuves de validation du registre fournisseur
 
+## Qualification opérateur Windows du 31 octobre 2026
+
+Les correctifs P0.3 de démarrage utilisent CPython 3.12.10. Les entrées boot,
+watchdog, contrôle, release et lecture de registre refusent Python 3.11 avant
+les imports métier. `registryPython`, le Python déclaré dans `boot-runtime.json`
+et l'interpréteur courant doivent désigner le même chemin résolu. Les relances
+réutilisent `sys.executable`. Le verdict du lecteur expose aussi son exécutable
+et sa version ; l'adaptateur Node les compare à la configuration figée.
+
+Le fichier `preproduction/operator_runtime.py` appartient au bundle opérateur
+figé. Copier seulement un script sans ce module ne constitue pas une mise à jour
+valide. Le diagnostic de registre utilise le SDK `voice_calibration` qualifié,
+sans dépendre d'un module `application` externe à cette archive.
+
+La qualification Windows reste défavorable : le contexte de lancement courant
+ne sépare pas opérateur et candidat, et le lanceur MCP natif gardé reste à livrer.
+Aucune modification de l'installation ou de ses droits n'est autorisée par ces
+correctifs. La sauvegarde opérationnelle vérifiée doit précéder toute intervention
+installée ; la bascule exige un accord distinct.
+
 Activation d'une release locale ou ajout d'un workspace : consulter [preproduction/RELEASES.md](preproduction/RELEASES.md) et utiliser le contrat explicite `release.py`.
 
 Archive source du lot local validé le 2026-10-11. Le code API est dans `src/calibration/` de ce dépôt ; le moteur et ses tests sont dans `Shared/voice-calibration/` du dépôt Wiki_Claude. Les scripts et rapports ici proviennent du harness local utilisé pour les validations.

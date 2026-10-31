@@ -2,6 +2,7 @@ import io
 import json
 from pathlib import Path
 import subprocess
+import sys
 import pytest
 import watchdog
 
@@ -10,6 +11,7 @@ def root(tmp_path):
     (tmp_path / 'queue').mkdir()
     (tmp_path / 'queue/owner.lock').write_text('{"pid":123}')
     (tmp_path / 'config.json').write_text(json.dumps({'host': '127.0.0.1', 'provider': 'simulated',
+        'registryPython': sys.executable,
         'healthPort': 4328, 'apiPort': 4327, 'commit': 'fixed', 'jobQueue': {'dataDir': str(tmp_path / 'queue')}}))
     return tmp_path
 

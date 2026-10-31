@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -22,6 +23,7 @@ class RuntimeIdentityTests(unittest.TestCase):
         patched.start()
         self.addCleanup(patched.stop)
         config = {'host': '127.0.0.1', 'provider': 'simulated', 'image': 'sha256:'+'a'*64,
+                  'registryPython': sys.executable,
                   'providerRegistryRequired': True,
                   'workspaces': [{'workspaceId': 'workspace-a', 'tenantId': 'tenant-a',
                                   'engine': {'restoreGuardDir': str(control)}}]}

@@ -7,6 +7,8 @@ import sys
 import time
 import urllib.error
 import urllib.request
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from operator_runtime import operator_python
 from filelock import FileLock
 from recover_owner import checked
 
@@ -30,6 +32,7 @@ def tick(root):
     if (root / 'supervisor.pause').exists():
         return 'paused'
     config = json.loads((root / 'config.json').read_text())
+    interpreter = operator_python(config)
     if config['host'] != '127.0.0.1' or config['provider'] != 'simulated':
         raise RuntimeError('Watchdog is limited to the local simulated service')
     try:
@@ -45,7 +48,7 @@ def tick(root):
         pass
     # control.py proves death; an unhealthy but live owner is never killed.
     try:
-        result = subprocess.run([sys.executable, str(root / 'control.py'), 'start', '--automatic'],
+        result = subprocess.run([interpreter, str(root / 'control.py'), 'start', '--automatic'],
                                 capture_output=True, text=True, timeout=90)
     except (OSError, subprocess.TimeoutExpired):
         return 'blocked'

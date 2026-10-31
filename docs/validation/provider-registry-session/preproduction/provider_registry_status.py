@@ -2,7 +2,9 @@
 import json
 from pathlib import Path
 import sys
-from application.provider_registry import ProviderRegistry, ProviderRegistryBlocked
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import operator_runtime
+from voice_calibration.core.provider_registry import ProviderRegistry, ProviderRegistryBlocked
 
 
 def verify(config):
