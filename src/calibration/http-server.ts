@@ -22,6 +22,8 @@ export type CalibrationHttpServerOptions = {
   port?: number;
   allowNetwork?: boolean;
   publicOrigin?: string;
+  /** Internal inherited transport supplies connections instead of a network listener. */
+  deferListen?: boolean;
   jobQueue?: CalibrationJobQueue;
   browserAuth?: { url: string; publishableKey: string };
 } & (
@@ -697,23 +699,26 @@ export async function startCalibrationUi(options: CalibrationHttpServerOptions):
   }
   if (!Number.isInteger(port) || port < 0 || port > 65_535) throw new Error("port must be an integer from 0 to 65535");
   const server = createCalibrationServer({ ...options, host, port });
-  await new Promise<void>((resolve, reject) => {
-    const onError = (error: Error) => {
-      server.off("error", onError);
-      reject(error);
-    };
-    server.once("error", onError);
-    server.listen(port, host, () => {
-      server.off("error", onError);
-      resolve();
+  let url = `http://${urlHost(host)}:${port}`;
+  if (!options.deferListen) {
+    await new Promise<void>((resolve, reject) => {
+      const onError = (error: Error) => {
+        server.off("error", onError);
+        reject(error);
+      };
+      server.once("error", onError);
+      server.listen(port, host, () => {
+        server.off("error", onError);
+        resolve();
+      });
     });
-  });
-  const address = server.address();
-  if (!address || typeof address === "string") {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-    throw new Error("unable to determine calibration UI address");
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      throw new Error("unable to determine calibration UI address");
+    }
+    url = `http://${urlHost(host)}:${address.port}`;
   }
-  const url = `http://${urlHost(host)}:${address.port}`;
   let closing: Promise<void> | undefined;
   return {
     server,

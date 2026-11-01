@@ -1,0 +1,15 @@
+{
+  "case": "final-r6",
+  "returncode": 0,
+  "stdout": "",
+  "stderr": "",
+  "docker_commands_mocked": [
+    [
+      "image",
+      "inspect",
+      "sha256:1ec8116a5514f619b9c0e3d7d3fd587fa7765d313a344bb96155b7a7f1da2ef9"
+    ]
+  ],
+  "real_docker_commands": false,
+  "no_unused_engine_removal": true
+}

@@ -167,6 +167,10 @@ export class DockerMcpStdioTransport extends NodeMcpStdioTransport {
     this.corpusPath = launch.wpmPath;
   }
 
+  fork(): DockerMcpStdioTransport {
+    return new DockerMcpStdioTransport(this.binding);
+  }
+
   override async schema(secret: string, timeoutMs: number): Promise<unknown> {
     this.prepared ??= (async () => {
       await mkdir(this.binding.stateDir, { recursive: true });

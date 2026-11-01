@@ -29,7 +29,7 @@ class InstalledPrestartTests(unittest.TestCase):
             "from pathlib import Path\n"
             "def recover(config):\n"
             " Path(__file__).with_name('recovery-called').write_text('unexpected')\n"
-            " return {'recovered': False}\n")
+            " raise SystemExit(0)  # stop at the unit's recovery boundary\n")
         source = self.root / "source"
         (source / "dist").mkdir(parents=True)
         (source / "package.json").write_text('{"name":"synthetic-target","type":"module"}')
@@ -46,14 +46,32 @@ class InstalledPrestartTests(unittest.TestCase):
             "commit": manifest["releaseId"], "module": manifest["module"],
             "releaseDir": str(self.target), "image": "sha256:" + "a" * 64,
             "registryPython": sys.executable, "providerRegistryRequired": True,
+            "windowsApiRoot": str(self.root / 'native-guard-unit-boundary'),
             "recoveryDir": str(self.root / "recovery"),
             "workspaces": [{"workspaceId": "workspace-a", "tenantId": "tenant-a",
                             "engine": {"restoreGuardDir": str(control)}}],
         }
         self.save_config()
+        (self.root / 'boot-runtime.json').write_text(json.dumps({'node':sys.executable}))
 
     def save_config(self):
         (self.root / "config.json").write_text(json.dumps(self.config))
+
+    def run_control(self):
+        # Isolate the financial ordering guarantee. The real native program
+        # seal and binary checks are covered by the AppContainer qualification.
+        # Keep the actual financial reader and both configuration checks.
+        probe = self.root / 'control-ordering-probe.py'
+        probe.write_text(
+            'import sys,runpy\nfrom pathlib import Path\n'
+            'from contextlib import nullcontext\nfrom unittest.mock import patch\n'
+            'root=Path(__file__).parent\nsys.path.insert(0,str(root))\n'
+            'sys.argv=[str(root/"control.py"),"start"]\n'
+            'with patch("node_runtime.pinned_node",return_value=sys.executable), '
+            'patch("api_authority.operator_lock",return_value=nullcontext()):\n'
+            ' runpy.run_path(str(root/"control.py"),run_name="__main__")\n')
+        return subprocess.run([sys.executable,'-I','-B',str(probe)],cwd=self.root,
+                              capture_output=True,text=True,timeout=20)
 
     def run_node(self, body):
         script = self.root / "probe.mjs"
@@ -87,16 +105,15 @@ class InstalledPrestartTests(unittest.TestCase):
 
     def test_modified_api_is_refused_before_recovery_or_popen(self):
         Path(self.config["module"]).write_text("export const changed = true;\n")
-        result = subprocess.run([sys.executable, str(self.root / "control.py"), "start"],
-                                cwd=self.root, capture_output=True, text=True, timeout=20)
+        result = self.run_control()
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse((self.root / "recovery-called").exists())
         self.assertFalse((self.root / "service.log").exists())
 
     def test_valid_legacy_target_reaches_the_recovery_boundary(self):
         # Positive control: the refusal test must not pass due to an earlier import/setup error.
-        result = subprocess.run([sys.executable, str(self.root / "control.py"), "start"],
-                                cwd=self.root, capture_output=True, text=True, timeout=20)
+        result = self.run_control()
+        self.assertEqual(result.returncode,0,result.stderr)
         self.assertTrue((self.root / "recovery-called").exists(), result.stderr)
 
     def test_node_adapter_runs_the_real_external_reader(self):
@@ -147,8 +164,7 @@ class InstalledPrestartTests(unittest.TestCase):
             stream.write("def recover(config):\n"
                          f" Path(__file__).with_name('config.json').write_text({json.dumps(json.dumps(changed))})\n"
                          " return {'recovered': False}\n")
-        result = subprocess.run([sys.executable, str(self.root / 'control.py'), 'start'],
-                                cwd=self.root, capture_output=True, text=True, timeout=20)
+        result = self.run_control()
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse((self.root / 'service.log').exists(), result.stderr)
 

@@ -1,0 +1,102 @@
+[
+  {
+    "path": "src\\calibration-cli.ts",
+    "sha256": "1f42f1429125d8170644775fc130b1a4b582c3166f6db047a3d84bbd2048e685"
+  },
+  {
+    "path": "src\\index.ts",
+    "sha256": "1e77e9c483c1824aeac4f4cfb88e4012b76b69c1a6c6e5e251b1a4aa4df02220"
+  },
+  {
+    "path": "src\\calibration\\application.ts",
+    "sha256": "31bf662ae61b9d9e30a12adbed56047c2057d6224781fe721ff8a8d4595d825f"
+  },
+  {
+    "path": "src\\calibration\\bootstrap-diagnostics.ts",
+    "sha256": "8f4d04873d3e3710da2791fc0c1046eccc869ef8948b63e132cc0be1a1c7ef22"
+  },
+  {
+    "path": "src\\calibration\\bridge.ts",
+    "sha256": "283db7ea2938c9f8afaef00d3910971f595942e1f21570b51738412434ab2177"
+  },
+  {
+    "path": "src\\calibration\\constants.ts",
+    "sha256": "46ed62f1ce0267907863e0e9756933d0cb0bd6a32f7c4257b85321540bf17483"
+  },
+  {
+    "path": "src\\calibration\\credentials.ts",
+    "sha256": "a821849000dd84472ef4355a5273688d5516bd58c36690a0ccb6d894efc9db85"
+  },
+  {
+    "path": "src\\calibration\\docker-transport.ts",
+    "sha256": "528b851ac70a46e8b06e1db6ae4e57bf3595fea718e29457e308f5c59c1a07ce"
+  },
+  {
+    "path": "src\\calibration\\domain.ts",
+    "sha256": "c261cd009ebca486e7e8b05cd7638bbe4193d2c2b700045526ef5817d07a8afe"
+  },
+  {
+    "path": "src\\calibration\\engine-manager.ts",
+    "sha256": "b72a4b9189b44e9e7e6992b5ef7c151bbb39504623fe1fb4f225e09fd13f4272"
+  },
+  {
+    "path": "src\\calibration\\entrypoint.ts",
+    "sha256": "2c4269e37126d480f862ce398ba822238d4b12b1badde7fb6537745a3c22aedb"
+  },
+  {
+    "path": "src\\calibration\\financial-contract.ts",
+    "sha256": "c9aa71fd6e6b1de8cf5e7baf8320becaa76d078b261112e4d61de8ea08cf29db"
+  },
+  {
+    "path": "src\\calibration\\fingerprint.ts",
+    "sha256": "504851ed49cc25de468e305627122098f905da695787cf25896abd99f6b1d7e5"
+  },
+  {
+    "path": "src\\calibration\\http-server.ts",
+    "sha256": "2e22f9f82e71942accab5797494c9c3045a612558637797d062e329dbc8d0aed"
+  },
+  {
+    "path": "src\\calibration\\job-queue.ts",
+    "sha256": "bf8688b55829c1a82e554c3118ee5317f246ad3b94da41a1b9eb87525c982a6d"
+  },
+  {
+    "path": "src\\calibration\\local-store.ts",
+    "sha256": "bb9899d4d50ebda83b176f4fbb906893b218c861a031deb9ee9c18774100327b"
+  },
+  {
+    "path": "src\\calibration\\ports.ts",
+    "sha256": "e096663360974ef5e566f2aad76e9d0e03782ca742fed9880ed0b41b585536f0"
+  },
+  {
+    "path": "src\\calibration\\redaction.ts",
+    "sha256": "6a9f013d0629bdac8f7f39091ae4bdb24d07bfe9ad12aee9f15752104518d97e"
+  },
+  {
+    "path": "src\\calibration\\standard-corpus.ts",
+    "sha256": "42b7e38389b0720cc5e2eca4d6c2d845119143a3bfb0034361c1abab63d551b3"
+  },
+  {
+    "path": "src\\calibration\\supabase-auth.ts",
+    "sha256": "7ff99d5f6b5b6c9d565a1ea1f65bfd95c8d1fb5098d100e94de131966449f621"
+  },
+  {
+    "path": "src\\ui\\calibration-client.ts",
+    "sha256": "b8cb9b53549655a9db275b4c64f0340169cba49e7e46184072ce81c9adc949d6"
+  },
+  {
+    "path": "src\\ui\\calibration-template.html",
+    "sha256": "e3cd29bbc56733f208d5e7f72b705d64fc45d2810e0a8454e7b957914144bf10"
+  },
+  {
+    "path": "package.json",
+    "sha256": "1154fdb9f569ce3cdf8385764b2802a107ee8ed499e743dd48315eb101104561"
+  },
+  {
+    "path": "package-lock.json",
+    "sha256": "20338f4e8b9a2f5bf5495d3298c8b964ed6bb6c2b555288c20795e5e6f141a25"
+  },
+  {
+    "path": "tsconfig.json",
+    "sha256": "e7d24f8cae6212fe2f649c4cb2ebcd5de395441a8f0ba9796679e53593c663c4"
+  }
+]

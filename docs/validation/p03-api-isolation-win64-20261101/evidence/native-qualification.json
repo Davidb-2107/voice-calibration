@@ -1,0 +1,1285 @@
+{
+  "root": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6",
+  "profile": "codex.p03.14835f89b05d4f8aaca4f8efaab69b1c",
+  "cases": [
+    {
+      "case": "nominal",
+      "health": {
+        "status": "ready",
+        "provider": "simulated",
+        "api": "http://127.0.0.1:56812",
+        "pid": 24044,
+        "proxyPid": 52468,
+        "commit": "local-b850001a2762237716f58f3e5bd7cc4cb4d4b8286e666025379d3b0f4b67133f",
+        "providerRegistry": {
+          "valid": true,
+          "workspaces": 1
+        }
+      },
+      "native_process": {
+        "pid": 24044,
+        "image": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+        "is_appcontainer": true,
+        "appcontainer_sid": "S-1-15-2-860835225-4181535305-3029450072-4145968142-1775768310-2301365668-2372544436",
+        "integrity_sid": "S-1-16-4096",
+        "capability_count": 0,
+        "token_type": 1,
+        "token_id_bytes": "f5697e2c01000000"
+      },
+      "effective_token_accesses": {
+        "source": "OpenProcess(pid)->OpenProcessToken(primary)->ImpersonateLoggedOnUser(primary)",
+        "pid": 24044,
+        "actual_api_is_appcontainer": true,
+        "reconstructed_token": false,
+        "operations": [
+          {
+            "label": "qualification-key-read",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x80000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "qualification-key-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "qualification-key-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "qualification-key-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "qualification-key-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-read",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x80000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-read",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x80000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-node-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-node-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-node-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-node-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-read",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x80000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-read-positive",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x80000000",
+            "allowed": true,
+            "expected_allowed": true,
+            "winerror": 0
+          },
+          {
+            "label": "state-write-positive",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\state\\business-entry.trace",
+            "desired_access": "0x40000000",
+            "allowed": true,
+            "expected_allowed": true,
+            "winerror": 0
+          },
+          {
+            "label": "code-dir-add-file",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code",
+            "desired_access": "0x2",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-dir-delete-child",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code",
+            "desired_access": "0x40",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-dir-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-dir-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          }
+        ],
+        "result": "PASS"
+      }
+    },
+    {
+      "case": "automatic-restart",
+      "health": {
+        "status": "ready",
+        "provider": "simulated",
+        "api": "http://127.0.0.1:56812",
+        "pid": 6308,
+        "proxyPid": 14684,
+        "commit": "local-b850001a2762237716f58f3e5bd7cc4cb4d4b8286e666025379d3b0f4b67133f",
+        "providerRegistry": {
+          "valid": true,
+          "workspaces": 1
+        }
+      },
+      "native_process": {
+        "pid": 6308,
+        "image": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+        "is_appcontainer": true,
+        "appcontainer_sid": "S-1-15-2-860835225-4181535305-3029450072-4145968142-1775768310-2301365668-2372544436",
+        "integrity_sid": "S-1-16-4096",
+        "capability_count": 0,
+        "token_type": 1,
+        "token_id_bytes": "6364812c01000000"
+      },
+      "effective_token_accesses": {
+        "source": "OpenProcess(pid)->OpenProcessToken(primary)->ImpersonateLoggedOnUser(primary)",
+        "pid": 6308,
+        "actual_api_is_appcontainer": true,
+        "reconstructed_token": false,
+        "operations": [
+          {
+            "label": "qualification-key-read",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x80000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "qualification-key-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "qualification-key-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "qualification-key-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "qualification-key-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-read",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x80000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-read",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x80000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-node-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-node-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-node-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-node-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-read",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x80000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-read-positive",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x80000000",
+            "allowed": true,
+            "expected_allowed": true,
+            "winerror": 0
+          },
+          {
+            "label": "state-write-positive",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\state\\business-entry.trace",
+            "desired_access": "0x40000000",
+            "allowed": true,
+            "expected_allowed": true,
+            "winerror": 0
+          },
+          {
+            "label": "code-dir-add-file",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code",
+            "desired_access": "0x2",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-dir-delete-child",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code",
+            "desired_access": "0x40",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-dir-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-dir-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          }
+        ],
+        "result": "PASS"
+      }
+    },
+    {
+      "case": "fresh-authority-process",
+      "health": {
+        "status": "ready",
+        "provider": "simulated",
+        "api": "http://127.0.0.1:56812",
+        "pid": 40564,
+        "proxyPid": 39896,
+        "commit": "local-b850001a2762237716f58f3e5bd7cc4cb4d4b8286e666025379d3b0f4b67133f",
+        "providerRegistry": {
+          "valid": true,
+          "workspaces": 1
+        }
+      },
+      "native_process": {
+        "pid": 40564,
+        "image": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+        "is_appcontainer": true,
+        "appcontainer_sid": "S-1-15-2-860835225-4181535305-3029450072-4145968142-1775768310-2301365668-2372544436",
+        "integrity_sid": "S-1-16-4096",
+        "capability_count": 0,
+        "token_type": 1,
+        "token_id_bytes": "405d8c2c01000000"
+      },
+      "effective_token_accesses": {
+        "source": "OpenProcess(pid)->OpenProcessToken(primary)->ImpersonateLoggedOnUser(primary)",
+        "pid": 40564,
+        "actual_api_is_appcontainer": true,
+        "reconstructed_token": false,
+        "operations": [
+          {
+            "label": "qualification-key-read",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x80000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "qualification-key-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "qualification-key-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "qualification-key-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "qualification-key-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-read",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x80000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-read",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x80000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-node-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-node-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-node-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-node-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-read",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x80000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-read-positive",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x80000000",
+            "allowed": true,
+            "expected_allowed": true,
+            "winerror": 0
+          },
+          {
+            "label": "state-write-positive",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\state\\business-entry.trace",
+            "desired_access": "0x40000000",
+            "allowed": true,
+            "expected_allowed": true,
+            "winerror": 0
+          },
+          {
+            "label": "code-dir-add-file",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code",
+            "desired_access": "0x2",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-dir-delete-child",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code",
+            "desired_access": "0x40",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-dir-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-dir-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          }
+        ],
+        "result": "PASS"
+      }
+    },
+    {
+      "case": "node24-before-entry",
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\boot_watchdog.py\", line 60, in <module>\n    raise SystemExit(main(HERE))\n                     ^^^^^^^^^^\n  File \"C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\boot_watchdog.py\", line 36, in main\n    env = environment(root)\n          ^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\boot_watchdog.py\", line 23, in environment\n    pinned_node(runtime['node'])\n  File \"C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\node_runtime.py\", line 21, in pinned_node\n    raise RuntimeError('Node '+NODE_VERSION+' Windows x64 identity required before business imports')\nRuntimeError: Node 22.23.4 Windows x64 identity required before business imports\n",
+      "entry_count_before": 3,
+      "entry_count_after": 3,
+      "marker_present": false
+    },
+    {
+      "case": "compiled-api-before-entry",
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\boot_watchdog.py\", line 60, in <module>\n    raise SystemExit(main(HERE))\n                     ^^^^^^^^^^\n  File \"C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\boot_watchdog.py\", line 45, in main\n    verify(guard, locks)\n  File \"C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_authority.py\", line 96, in verify\n    raise RuntimeError('Qualified API code or protection changed before business imports')\nRuntimeError: Qualified API code or protection changed before business imports\n",
+      "entry_count_before": 3,
+      "entry_count_after": 3,
+      "marker_present": false
+    },
+    {
+      "case": "api-positive-control",
+      "same_bytes_sha256": "216a08218e18853c7291142031ba1ef79fdf677660486d75833cc23c88e9ccf1",
+      "marker_created": true,
+      "returncode": 1
+    },
+    {
+      "case": "mcp-source-before-import",
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\boot_watchdog.py\", line 60, in <module>\n    raise SystemExit(main(HERE))\n                     ^^^^^^^^^^\n  File \"C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\boot_watchdog.py\", line 45, in main\n    verify(guard, locks)\n  File \"C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_authority.py\", line 93, in verify\n    raise RuntimeError('Independent controller code, caches or protection changed')\nRuntimeError: Independent controller code, caches or protection changed\n",
+      "entry_count_before": 3,
+      "entry_count_after": 3,
+      "marker_present": false
+    },
+    {
+      "case": "mcp-positive-control",
+      "same_bytes_sha256": "58e305605ba5b420ffcd897b77aa994143840ebb8543377d296551e5f25d9bf9",
+      "marker_created": true,
+      "returncode": 1
+    },
+    {
+      "case": "mcp-cache-before-import",
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\boot_watchdog.py\", line 60, in <module>\n    raise SystemExit(main(HERE))\n                     ^^^^^^^^^^\n  File \"C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\boot_watchdog.py\", line 45, in main\n    verify(guard, locks)\n  File \"C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_authority.py\", line 92, in verify\n    if inventory(guard, payload['roots'], locks) != payload['files']:\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_authority.py\", line 51, in inventory\n    raise RuntimeError('Loose Python caches are forbidden in qualified controller programs')\nRuntimeError: Loose Python caches are forbidden in qualified controller programs\n",
+      "entry_count_before": 3,
+      "entry_count_after": 3,
+      "marker_present": false
+    },
+    {
+      "case": "restored-after-counterproofs",
+      "health": {
+        "status": "ready",
+        "provider": "simulated",
+        "api": "http://127.0.0.1:56812",
+        "pid": 27632,
+        "proxyPid": 24056,
+        "commit": "local-b850001a2762237716f58f3e5bd7cc4cb4d4b8286e666025379d3b0f4b67133f",
+        "providerRegistry": {
+          "valid": true,
+          "workspaces": 1
+        }
+      },
+      "native_process": {
+        "pid": 27632,
+        "image": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+        "is_appcontainer": true,
+        "appcontainer_sid": "S-1-15-2-860835225-4181535305-3029450072-4145968142-1775768310-2301365668-2372544436",
+        "integrity_sid": "S-1-16-4096",
+        "capability_count": 0,
+        "token_type": 1,
+        "token_id_bytes": "6551922c01000000"
+      },
+      "effective_token_accesses": {
+        "source": "OpenProcess(pid)->OpenProcessToken(primary)->ImpersonateLoggedOnUser(primary)",
+        "pid": 27632,
+        "actual_api_is_appcontainer": true,
+        "reconstructed_token": false,
+        "operations": [
+          {
+            "label": "qualification-key-read",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x80000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "qualification-key-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "qualification-key-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "qualification-key-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "qualification-key-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\qualification.key",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-read",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x80000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "financial-witness-key-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\secrets\\financial-release-authority.key",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-read",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x80000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "registry-key-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\recovery\\workspace-api\\provider-registry.key",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-node-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-node-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-node-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-node-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-read",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x80000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-write",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x40000000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-write-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-write-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "authority-program-delete",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control\\api_supervisor.py",
+            "desired_access": "0x10000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-read-positive",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\api\\dist\\index.js",
+            "desired_access": "0x80000000",
+            "allowed": true,
+            "expected_allowed": true,
+            "winerror": 0
+          },
+          {
+            "label": "state-write-positive",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\state\\business-entry.trace",
+            "desired_access": "0x40000000",
+            "allowed": true,
+            "expected_allowed": true,
+            "winerror": 0
+          },
+          {
+            "label": "code-dir-add-file",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code",
+            "desired_access": "0x2",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-dir-delete-child",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code",
+            "desired_access": "0x40",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-dir-dac",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code",
+            "desired_access": "0x40000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          },
+          {
+            "label": "code-dir-owner",
+            "path": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code",
+            "desired_access": "0x80000",
+            "allowed": false,
+            "expected_allowed": false,
+            "winerror": 5
+          }
+        ],
+        "result": "PASS"
+      }
+    }
+  ],
+  "installed_modified": false,
+  "provider_emissions": 0,
+  "node24": {
+    "version": "v24.18.0",
+    "sha256": "9a4eb5f1c29c6a2e93852ead46b999e284a6a5ca8bab4d4e241d587d025a52de"
+  },
+  "result": "PASS"
+}

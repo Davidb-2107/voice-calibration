@@ -1,0 +1,122 @@
+{
+  "result": "PASS",
+  "root": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6",
+  "qualified_seals_and_all_immutable_inventory": "PASS",
+  "source_matches_qualified_programs": [
+    {
+      "file": "authority\\control\\api_authority.py",
+      "sha256": "3f0de25d4b32e46be7f81ea8d1d252bb7772a7cfa211bda637feb0c1c5e0d0de"
+    },
+    {
+      "file": "authority\\control\\api_broker.mjs",
+      "sha256": "8f7088f272a0f48aba2e74db630c765aeceea7952727c5698a7ebb2b77850234"
+    },
+    {
+      "file": "authority\\control\\api_supervisor.py",
+      "sha256": "54149e7299337f78f4a3727bf720992918c1904773b2fecadf11b2adb24f9df0"
+    },
+    {
+      "file": "authority\\control\\api_worker.mjs",
+      "sha256": "4e28e81a184ce230b4d5741a8c7a1027d94a0081d0e39f2f50dec90ef7528e03"
+    },
+    {
+      "file": "authority\\control\\boot_watchdog.py",
+      "sha256": "ed398ce93931af5a48b03a8c1ff9a36f5399a3cab049fd7d36620bcb1b24b00c"
+    },
+    {
+      "file": "authority\\control\\chaos_worker.py",
+      "sha256": "10aa0579649419edc4eae20b7ff20045a7c0e475a3872c8aa9f7b588a95615e4"
+    },
+    {
+      "file": "authority\\control\\control.py",
+      "sha256": "899f952a7561e404de450fe492fd82190dd9af87f2d5cdc10790b02ea9621cf1"
+    },
+    {
+      "file": "authority\\control\\financial_preflight.mjs",
+      "sha256": "c33057b182be68da14ca7e0af2811639257dcce4595d7956d1a6e7405750e1ec"
+    },
+    {
+      "file": "authority\\control\\financial_preflight.py",
+      "sha256": "702088f7bb1c95db457624213cbfc542c01adc26699c735cf694d393e6ee160e"
+    },
+    {
+      "file": "authority\\control\\install_boot_task.py",
+      "sha256": "d01d4b6ffeabc3d4f49ec7b6cc5a5ac880c8cc9bcc6c30ef54c06959ec468b7e"
+    },
+    {
+      "file": "authority\\control\\install_provider_registry.py",
+      "sha256": "f0473f621e7a863005b4b862b50837204357bd45ef5f0fa5a653773f18aaea7b"
+    },
+    {
+      "file": "authority\\control\\node_runtime.py",
+      "sha256": "c6c268dc8d9e6420ece96149087211415a1f51b762cd3b4e4c570cb83c4505b9"
+    },
+    {
+      "file": "authority\\control\\operator_runtime.py",
+      "sha256": "5735e7b604ecdd5bc89b0e15234c8bedd339634a768333c4d9fefd08f97d4aa6"
+    },
+    {
+      "file": "authority\\control\\private_channel.mjs",
+      "sha256": "1726e8226a49d4a527a551bd2ebf328eb89751c933d8804dc5066ed13153e5ea"
+    },
+    {
+      "file": "authority\\control\\provider_registry_status.py",
+      "sha256": "aead15a1060102a721cb6dbf14cd379e3779cba1a29c6c68f8c029c556e841d3"
+    },
+    {
+      "file": "authority\\control\\reconcile.py",
+      "sha256": "607a805f2dd4d9ff034415b6b4a2d9d370406b8840c385feaad8babec3ed00dd"
+    },
+    {
+      "file": "authority\\control\\recover_owner.py",
+      "sha256": "fc4e06b11dcd085634f1c4eec6739d8de84f92033a92e02011a2dd3feff6919f"
+    },
+    {
+      "file": "authority\\control\\release.py",
+      "sha256": "8b49a1b43090ca4f4310541f6d04d28b5d5c8def93528cefc5060aa2a4dd1a0b"
+    },
+    {
+      "file": "authority\\control\\restore.py",
+      "sha256": "86539325b18ded090b1ddf52fe30647d78d7f2e3dc4a0902fd77e4520cb11975"
+    },
+    {
+      "file": "authority\\control\\service.mjs",
+      "sha256": "330c5db6832900ea982cc5c14fb34622d4720f5ebc607e95656fdecb5ccd962a"
+    },
+    {
+      "file": "authority\\control\\validate_provider_registry_docker.py",
+      "sha256": "0f9d7db20f8513bb7e76dcd42bc769633903668b6368bea03b9572a066fc70a4"
+    },
+    {
+      "file": "authority\\control\\watchdog.py",
+      "sha256": "4eb96f4fc94103bcb5832b50d387cae099e76b4be828f38070bfd4a112e02657"
+    },
+    {
+      "file": "authority\\control\\windows_api_candidate.py",
+      "sha256": "40782d810bd108328d0a8401d8d976e4b154861c253e9c993ed3c4ca534363dd"
+    },
+    {
+      "file": "authority\\control\\windows_candidate.py",
+      "sha256": "9c4570202f7b5bbb66a4c1262fc0e1200e9d1bdd687bdc9f1c7aa4a0dcb6d1cc"
+    },
+    {
+      "file": "code\\api_worker.mjs",
+      "sha256": "4e28e81a184ce230b4d5741a8c7a1027d94a0081d0e39f2f50dec90ef7528e03"
+    },
+    {
+      "file": "code\\private_channel.mjs",
+      "sha256": "1726e8226a49d4a527a551bd2ebf328eb89751c933d8804dc5066ed13153e5ea"
+    }
+  ],
+  "python_cache_policy": "stdlib-zip-only-v1",
+  "loose_bytecode_or_cache_directories": [],
+  "historical_artifacts_verified": 12,
+  "historical_artifact_bytes": 543732998,
+  "original_manifest_sha256": "28728e95d0a5c02749dc519eba1595739428de6869e76e3f5c2a46a847c845f5",
+  "candidate_manifest_sha256": "0cc28cbbce8f5f2056df81be07a60930611a26b96eb510a1717a9ea052185d05",
+  "native_manifest_sha256": "9312eed7566b3d8575597139368175ed56886da7318184ce3be978eaa691dcbc",
+  "node_exe_sha256": "dccc52de28d8df2ee22d2062424f8c563070d95d8ad70c54c4bf01d590dec14f",
+  "python_exe_sha256": "4d6f5f81a4bca11191c4c7c6b43632694d0a4ce74e068619d8fdc161d469859a",
+  "installed_writes": false,
+  "provider_emissions": 0
+}

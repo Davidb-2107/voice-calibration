@@ -2,6 +2,10 @@
 import json
 from pathlib import Path
 import sys
+if __name__ == '__main__' and (not sys.flags.isolated or not sys.dont_write_bytecode
+        or (Path(__file__).resolve().parent / '__pycache__').exists()
+        or list(Path(__file__).resolve().parent.glob('*.pyc'))):
+    raise RuntimeError('Registry reader requires Python 3.12 with -I -B and source-only operator imports')
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from operator_runtime import operator_python
 from voice_calibration.core.provider_registry import ProviderRegistry, ProviderRegistryBlocked

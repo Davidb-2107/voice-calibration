@@ -1,0 +1,67 @@
+[
+  {
+    "name": "review-green-http",
+    "command": [
+      "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-24ceb431-6f9361ce-api-native\\node\\node-v22.23.4-win-x64\\node.exe",
+      "--test",
+      "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-worktrees\\p03-internal-finance-service\\docs\\validation\\provider-registry-session\\preproduction\\test_private_http.mjs"
+    ],
+    "cwd": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-worktrees\\p03-internal-finance-service",
+    "returncode": 0,
+    "log": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\review-green-http.log"
+  },
+  {
+    "name": "review-green-fork",
+    "command": [
+      "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-24ceb431-6f9361ce-api-native\\node\\node-v22.23.4-win-x64\\node.exe",
+      "--test",
+      "test/calibration-private-http.test.mjs"
+    ],
+    "cwd": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\build-service",
+    "returncode": 0,
+    "log": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\review-green-fork.log"
+  },
+  {
+    "name": "financial-regressions",
+    "command": [
+      "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\ci-venv\\Scripts\\python.exe",
+      "-B",
+      "-m",
+      "pytest",
+      "-q",
+      "test_financial_contracts.py",
+      "test_financial_dispatch.py",
+      "test_financial_invariants.py",
+      "test_financial_ledger.py",
+      "test_financial_operation_binding.py",
+      "test_financial_projection.py",
+      "test_financial_reconcile_batch.py",
+      "test_financial_reconciliation.py",
+      "test_financial_rollback.py"
+    ],
+    "cwd": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\contract-vault\\Shared\\voice-calibration",
+    "returncode": 0,
+    "log": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\financial-regressions.log"
+  },
+  {
+    "name": "operator-regressions",
+    "command": [
+      "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\ci-venv\\Scripts\\python.exe",
+      "-B",
+      "-m",
+      "pytest",
+      "-q",
+      "test_boot_watchdog.py",
+      "test_watchdog.py",
+      "test_release_runtime.py",
+      "test_release_prestart.py",
+      "test_new_lock_recovery.py",
+      "test_release_status.py",
+      "test_api_node_binding.py",
+      "test_api_cache_policy.py"
+    ],
+    "cwd": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-worktrees\\p03-internal-finance-service\\docs\\validation\\provider-registry-session\\preproduction",
+    "returncode": 0,
+    "log": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\operator-regressions.log"
+  }
+]
