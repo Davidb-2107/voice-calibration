@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -13,7 +14,7 @@ class RuntimeIdentityTests(unittest.TestCase):
         control.mkdir(parents=True)
         # This service unit tests the external controller's ordering. Authentic
         # SQLite/HMAC and target qualification belong to the paired reader tests.
-        # No vault installation or global Python package is borrowed by service CI.
+        # CI installs its declared SDK in a fresh venv, never a vault installation.
         (control/'provider-registry').mkdir()
         (control/'provider-registry.key').write_bytes(b'r'*32)
         reader = (lambda *args: object(), lambda registry: frozenset({'internal_finance_v1'}),
@@ -22,6 +23,7 @@ class RuntimeIdentityTests(unittest.TestCase):
         patched.start()
         self.addCleanup(patched.stop)
         config = {'host': '127.0.0.1', 'provider': 'simulated', 'image': 'sha256:'+'a'*64,
+                  'registryPython': sys.executable,
                   'providerRegistryRequired': True,
                   'workspaces': [{'workspaceId': 'workspace-a', 'tenantId': 'tenant-a',
                                   'engine': {'restoreGuardDir': str(control)}}]}

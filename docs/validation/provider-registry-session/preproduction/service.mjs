@@ -4,9 +4,13 @@ import { dirname, join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
+import { createFinancialPreflight } from './financial_preflight.mjs';
 
 const config = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 if (config.host !== '127.0.0.1' || config.provider !== 'simulated') throw new Error('Local simulated service only');
+const control = dirname(process.argv[2]);
+const financialPreflight = createFinancialPreflight(config, control, process.argv[3]);
+await financialPreflight();
 if (!config.recoveryDir || existsSync(join(config.recoveryDir, 'restore.lock')))
   throw new Error('Restore control required; incomplete restoration must be reconciled before startup');
 for (const workspace of config.workspaces) {
@@ -21,14 +25,16 @@ for (const workspace of config.workspaces) {
 const guardedImage = await promisify(execFile)('docker', ['image', 'inspect', '--format',
   '{{index .Config.Labels "voice-calibration.local-patch"}}', config.image], { timeout: 10000, windowsHide: true });
 if (guardedImage.stdout.trim() !== 'provider-registry') throw new Error('Image with independent provider registry required');
+// Inspection is asynchronous. Recheck immediately before import; deployment must seal candidate sources.
+await financialPreflight();
 const { startSupabaseCalibrationApi, DockerMcpStdioTransport } = await import(pathToFileURL(config.module));
-const control = dirname(process.argv[2]);
 const stopFile = join(control, 'stop.request');
 if (existsSync(stopFile)) unlinkSync(stopFile);
 const workspaces = config.workspaces.map(w => ({ ...w,
   mcpTransport: new DockerMcpStdioTransport({ ...w.engine, image: config.image }) }));
 const api = await startSupabaseCalibrationApi({ host: config.host, port: config.apiPort,
   supabase: config.supabase, workspaces, jobQueue: config.jobQueue, providerMode: config.provider,
+  requireFinancialPreflight: true, financialPreflight,
   maxConcurrentStarts: 4, idleTimeoutMs: 600000 });
 let closing = false;
 const health = createServer(async (request, response) => {

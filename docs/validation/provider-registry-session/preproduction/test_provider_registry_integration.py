@@ -20,6 +20,7 @@ def configuration(tmp_path):
     control.mkdir(parents=True)
     (control / 'guard.json').write_text(json.dumps({'version': 1, 'workspace_id': 'a', 'state': 'quarantined'}))
     return {'host': '127.0.0.1', 'provider': 'simulated', 'providerRegistryRequired': True,
+            'registryPython': sys.executable,
             'jobQueue': {'dataDir': str(data / 'queue')}, 'recoveryDir': str(recovery),
             'workspaces': [{'workspaceId': 'a', 'tenantId': 'tenant-a', 'stateDir': str(data / 'a/state'),
                             'engine': {'restoreGuardDir': str(control)}}]}

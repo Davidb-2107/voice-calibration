@@ -76,7 +76,7 @@ def audit(config):
             raise RuntimeError('Reconciliation requires an existing workspace quarantine')
         provider_records = []
         if config.get('providerRegistryRequired') or (guard.parent / 'provider-registry').exists():
-            from application.provider_registry import ProviderRegistry, ProviderRegistryBlocked
+            from voice_calibration.core.provider_registry import ProviderRegistry, ProviderRegistryBlocked
             try:
                 provider_records = ProviderRegistry(guard.parent / 'provider-registry',
                     guard.parent / 'provider-registry.key', workspace_id, workspace['tenantId']).records()

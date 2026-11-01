@@ -64,6 +64,94 @@ function simulatedSupabase() {
   } };
 }
 
+function preflightWorkspace(t) {
+  const root = mkdtempSync(join(tmpdir(), "supabase-preflight-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const started = [];
+  const closed = new Set();
+  t.mock.method(DockerMcpStdioTransport.prototype, "readCorpus", async function (secret) {
+    await this.schema(secret);
+    return "{}";
+  });
+  t.mock.method(DockerMcpStdioTransport.prototype, "schema", async function () {
+    if (closed.has(this)) throw new Error("Closed transport reused");
+    if (!started.includes(this)) started.push(this);
+    return { type: "object" };
+  });
+  t.mock.method(DockerMcpStdioTransport.prototype, "callTool", async function (name) {
+    if (name === "get_reuse_scope") return { emitted: true, response: {
+      schema: "source-access-scope-v1", mode: "legacy", tenantId: "tenant-a", workspaceId: "workspace-a" } };
+    strictEqual(name, "get_server_info");
+    return { emitted: true, response: { tenant_id: "tenant-a", workspace_id: "workspace-a",
+      state_dir: this.instanceStateDir } };
+  });
+  t.mock.method(DockerMcpStdioTransport.prototype, "close", async function () { closed.add(this); });
+  const workspace = { tenantId: "tenant-a", workspaceId: "workspace-a", dataDir: join(root, "ui"),
+    stateDir: join(root, "state"), wpmPath: join(root, "corpus", "wpm.json"),
+    credentials: { env: { ELEVENLABS_API_KEY: "synthetic-preflight-only" } } };
+  mkdirSync(join(root, "corpus"));
+  writeFileSync(workspace.wpmPath, "{}");
+  workspace.mcpTransport = new DockerMcpStdioTransport({ root, image: `sha256:${"0".repeat(64)}`,
+    ...workspace, uiWorkspaceDir: join(workspace.dataDir, "workspaces", workspace.workspaceId) });
+  return { workspace, started, closed };
+}
+
+test("protected API refuses a required financial preflight with no controller", async () => {
+  await rejects(async () => {
+    const api = await startApi({ supabase: authConfig, workspaces: [], requireFinancialPreflight: true });
+    await api.close();
+  }, /preflight/i);
+});
+
+test("financial preflight denies bootstrap before engine and workspace provisioning", async (t) => {
+  const { workspace, started } = preflightWorkspace(t);
+  const checked = [];
+  const api = await startApi({ supabase: { ...authConfig, fetch: simulatedSupabase().fetch },
+    workspaces: [workspace], requireFinancialPreflight: true,
+    financialPreflight: async (workspaceId) => {
+      checked.push(workspaceId);
+      throw new Error("Target qualification rejected");
+    } });
+  t.after(() => api.close());
+  const response = await fetch(`${api.url}/api/v1/bootstrap`, { headers: { authorization: "Bearer alice" } });
+  await response.arrayBuffer();
+  strictEqual(response.status, 500);
+  deepStrictEqual(checked, ["workspace-a"]);
+  strictEqual(started.length, 0);
+  strictEqual(existsSync(workspace.dataDir), false);
+});
+
+test("financial preflight is rerun after idle stop and blocks a revoked target", async (t) => {
+  const { workspace, started, closed } = preflightWorkspace(t);
+  const checked = [];
+  let qualified = true;
+  const api = await startApi({ supabase: { ...authConfig, fetch: simulatedSupabase().fetch },
+    workspaces: [workspace], idleTimeoutMs: 100, requireFinancialPreflight: true,
+    financialPreflight: async (workspaceId) => {
+      checked.push(workspaceId);
+      if (!qualified) throw new Error("Target qualification revoked");
+    } });
+  t.after(() => api.close());
+  const responses = await Promise.all([0, 1].map(() => fetch(`${api.url}/api/v1/bootstrap`,
+    { headers: { authorization: "Bearer alice" } })));
+  for (const response of responses) {
+    strictEqual(response.status, 200);
+    await response.arrayBuffer();
+  }
+  deepStrictEqual(checked, ["workspace-a"]);
+  strictEqual(started.length, 1);
+  const deadline = Date.now() + 3000;
+  while (!closed.has(started[0]) && Date.now() < deadline)
+    await new Promise(resolve => setTimeout(resolve, 10));
+  strictEqual(closed.has(started[0]), true);
+  qualified = false;
+  const denied = await fetch(`${api.url}/api/v1/bootstrap`, { headers: { authorization: "Bearer alice" } });
+  await denied.arrayBuffer();
+  strictEqual(denied.status, 500);
+  deepStrictEqual(checked, ["workspace-a", "workspace-a"]);
+  strictEqual(started.length, 1);
+});
+
 test("protected Docker API recreates its transport after each idle stop", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "supabase-docker-wake-"));
   const started = [];

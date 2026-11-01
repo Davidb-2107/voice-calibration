@@ -186,8 +186,16 @@ export async function startSupabaseCalibrationApi(
     allowUnisolatedLocal?: boolean;
     providerMode?: "simulated" | "elevenlabs";
     jobQueue?: { dataDir: string; maxConcurrentJobs?: number };
+    financialPreflight?: (workspaceId: string) => Promise<void>;
+    requireFinancialPreflight?: boolean;
   } & EngineManagerOptions,
 ): Promise<CalibrationUiHandle> {
+  const financialPreflight = options.financialPreflight;
+  if (
+    (financialPreflight !== undefined && typeof financialPreflight !== "function") ||
+    (options.requireFinancialPreflight === true && !financialPreflight)
+  )
+    throw new Error("Financial preflight controller required before startup");
   const host = options.host ?? "127.0.0.1";
   if (options.publicOrigin) {
     const origin = new URL(options.publicOrigin);
@@ -255,6 +263,7 @@ export async function startSupabaseCalibrationApi(
   const engines = new EngineManager(
     fixed.map((workspace) => ({
       workspaceId: workspace.workspaceId,
+      preflight: financialPreflight ? () => financialPreflight(workspace.workspaceId) : undefined,
       create: async () => {
         const application = await createVoiceCalibrationApplication({
           ...workspace,

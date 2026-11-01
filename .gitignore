@@ -16,3 +16,6 @@ dist/
 
 # local temporary files
 /temp/
+
+# Private SDK checkout used only by isolated operator validation.
+/.scratch/ci-sdk/

@@ -1,5 +1,47 @@
 # Sources et preuves de validation du registre fournisseur
 
+## Qualification opérateur Windows du 31 octobre 2026
+
+Les correctifs P0.3 de démarrage utilisent CPython 3.12.10. Les entrées boot,
+watchdog, contrôle, release et lecture de registre refusent Python 3.11 avant
+les imports métier. `registryPython`, le Python déclaré dans `boot-runtime.json`
+et l'interpréteur courant doivent désigner le même chemin résolu. Les relances
+réutilisent `sys.executable`. Le verdict du lecteur expose aussi son exécutable
+et sa version ; l'adaptateur Node les compare à la configuration figée.
+
+Le fichier `preproduction/operator_runtime.py` appartient au bundle opérateur
+figé. Copier seulement un script sans ce module ne constitue pas une mise à jour
+valide. Le diagnostic de registre utilise le SDK `voice_calibration` qualifié,
+sans dépendre d'un module `application` externe à cette archive.
+
+Le premier bilan Windows du 31 octobre était défavorable. Le correctif isolé
+`preproduction/windows_candidate.py` fournit désormais une route AppContainer
+dédiée : code en lecture/exécution, état privé modifiable, autorité séparée et
+clé inaccessible au candidat. Le compte hôte est partagé ; le SID applicatif,
+l'intégrité basse et les accès effectifs sont contrôlés dans le vrai jeton.
+
+L'opérateur crée un dossier neuf via `WindowsCandidate.create`, y prépare les
+binaires et dépendances privés, puis qualifie une commande fixe avec `qualify`.
+Exécutable et script d'entrée doivent appartenir au code figé. Python utilise
+`-I -B` ; Node utilise `--preserve-symlinks --preserve-symlinks-main`, sans reparse
+point dans l'arbre. Aucun chargement de code depuis l'état modifiable.
+
+Chaque connexion utilise la même route, sans création ou réparation implicite :
+`<Python opérateur 3.12> -I -B windows_candidate.py run <dossier qualifié>`.
+`WindowsCandidate.open` vérifie les protections et la qualification existantes.
+Le lancement recontrôle signature, empreintes et ACL, garde les fichiers ouverts
+sans partage en écriture/suppression, crée le processus suspendu, vérifie son
+identité AppContainer et reprend seulement ce jeton. Les seuls handles hérités
+sont les trois pipes stdio. Aucun repli vers un processus ordinaire.
+
+Ce manifeste atteste le code ; il ne signe aucun montant ni état financier et
+ne remplace pas le lecteur financier indépendant P0.3. La qualification du MCP
+isolé ne vaut pas branchement de l'API installée. Aucun changement installé,
+exception réseau ou activation financière. Les nouveaux profils et fixtures
+restent conservés. Sauvegarde opérationnelle vérifiée juste avant intervention
+autorisée, puis bascule après accord distinct. Le bilan correspondant est dans
+le vault, `docs/superpowers/plans/2026-10-31-p03-windows-isolation.md`.
+
 Activation d'une release locale ou ajout d'un workspace : consulter [preproduction/RELEASES.md](preproduction/RELEASES.md) et utiliser le contrat explicite `release.py`.
 
 Archive source du lot local validé le 2026-10-11. Le code API est dans `src/calibration/` de ce dépôt ; le moteur et ses tests sont dans `Shared/voice-calibration/` du dépôt Wiki_Claude. Les scripts et rapports ici proviennent du harness local utilisé pour les validations.

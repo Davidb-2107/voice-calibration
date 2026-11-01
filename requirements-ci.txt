@@ -1,0 +1,5 @@
+# Checkout Wiki_Claude at the immutable revision selected in .github/workflows/ci.yml.
+# These first-party packages are private and are not resolved by name on PyPI.
+-c .scratch/ci-sdk/Shared/voice-calibration/requirements.lock
+./.scratch/ci-sdk/Shared/tiktok-spec
+./.scratch/ci-sdk/Shared/voice-calibration[test]
