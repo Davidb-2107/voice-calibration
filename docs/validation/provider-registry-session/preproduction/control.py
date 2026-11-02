@@ -5,11 +5,16 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+if __name__ == '__main__' and (not sys.flags.isolated or not sys.dont_write_bytecode
+        or (Path(__file__).resolve().parent / '__pycache__').exists()
+        or list(Path(__file__).resolve().parent.glob('*.pyc'))):
+    raise RuntimeError('Operator runtime requires Python 3.12 with -I -B and no operator bytecode cache')
 import time
 import urllib.request
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from operator_runtime import operator_python
-from filelock import FileLock
+from node_runtime import pinned_node
+from api_authority import operator_lock
 from recover_owner import checked, recover
 
 HERE = Path(__file__).resolve().parent
@@ -32,9 +37,14 @@ if action == 'start':
     config_hash = hashlib.sha256(config_bytes).hexdigest()
     config = json.loads(config_bytes)
     interpreter = operator_python(config)
+    runtime = json.loads((HERE / 'boot-runtime.json').read_text())
+    node = pinned_node(runtime['node'])
+    if os.name == 'nt' and not config.get('windowsApiRoot'):
+        raise RuntimeError('Windows API requires a qualified AppContainer; no unrestricted fallback')
     assert config['host'] == '127.0.0.1' and config['provider'] == 'simulated'
     # Kernel lock releases on supervisor death; serialize recovery and startup.
-    with FileLock(str(checked(HERE / 'startup.lock')), timeout=1):
+    checked(HERE / 'startup.lock')
+    with operator_lock(HERE, 'startup.lock', 1):
         if automatic and paused.exists():
             raise SystemExit(0)
         preflight = [interpreter, '-I', '-B', str(HERE / 'financial_preflight.py'),
@@ -44,14 +54,21 @@ if action == 'start':
         subprocess.run(preflight, check=True, capture_output=True, timeout=15)
         flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0
         with (HERE / 'service.log').open('ab') as log:
-            child = subprocess.Popen(['node', str(HERE / 'service.mjs'), str(HERE / 'config.json'), config_hash],
+            command = ([interpreter, '-I', '-B', str(HERE / 'api_supervisor.py'), config_hash]
+                if os.name == 'nt' else [node, str(HERE / 'service.mjs'), str(HERE / 'config.json'), config_hash])
+            child = subprocess.Popen(command,
                 cwd=HERE, stdin=subprocess.DEVNULL, stdout=log, stderr=log, creationflags=flags)
         deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
             assert child.poll() is None, 'Startup failed; inspect service.log'
             try:
                 result = status()
-                assert result['pid'] == child.pid
+                if os.name == 'nt':
+                    owner = json.loads((HERE / 'native-owner.json').read_text())
+                    assert owner['supervisorPid'] == child.pid and result['pid'] == owner['apiPid']
+                    assert result['proxyPid'] == owner['proxyPid']
+                else:
+                    assert result['pid'] == child.pid
                 print(json.dumps(result))
                 if recovery['recovered']:
                     print(json.dumps(recovery))

@@ -1,0 +1,270 @@
+{
+  "before_inventory_sha256": "f6ab3bf3a8d9846dc7c5fb7e77f38725640ce0ab37730d5536c197e4e8dcd970",
+  "after_inventory_sha256": "063de42ffa091c653e7a9583a93806df1e26eb2825c471ff4d762655f4e51963",
+  "observed_at": "2026-11-01T22:25:01.598836+00:00",
+  "comparisons": {
+    "installed_config": true,
+    "installed_api_runtime": true,
+    "installed_supervisor_files": true,
+    "installed_watchdog": true,
+    "installed_boot_runtime": true,
+    "codex_client_config": false,
+    "neon_binding": true,
+    "workspace_key_and_registry_metadata": true,
+    "operational_data_metadata": true,
+    "canonical_vault_git": false,
+    "selected_voice_mcp_clients": true
+  },
+  "installed_api_runtime": "b105d9869fa9d87bb63061202bf3c85a36730bd65ef6cf77be3b9a4414c0074f",
+  "configured_engine_image": "sha256:6ab7ce640f8ef6e9c3534c69f99e42d6f5acc100ae4b8560548b1c5dfcd73ebc",
+  "listeners": [
+    {
+      "local": "127.0.0.1:4317",
+      "state": "LISTENING",
+      "pid": 14664
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "LISTENING",
+      "pid": 14664
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "ESTABLISHED",
+      "pid": 14664
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    },
+    {
+      "local": "127.0.0.1:4318",
+      "state": "TIME_WAIT",
+      "pid": 0
+    }
+  ],
+  "workspace_states": [
+    {
+      "workspace": "hosted-workspace-a",
+      "guard_state": "quarantined"
+    },
+    {
+      "workspace": "hosted-workspace-b",
+      "guard_state": "quarantined"
+    },
+    {
+      "workspace": "personal-david",
+      "guard_state": "ready"
+    }
+  ],
+  "canonical_vault_git": {
+    "head": {
+      "code": 0,
+      "stdout": "f745fe7b071ef7c0d449abf3842c97fd125bb0f3",
+      "error": ""
+    },
+    "branch": {
+      "code": 0,
+      "stdout": "master",
+      "error": ""
+    },
+    "status": {
+      "code": 0,
+      "stdout": "M Projects/HORS-VAULT.md\n M \"cartographie/SDLC MAP.md\"\n D cartographie/skills_add_ui.py\n?? Clippings/\n?? raw/2026-10-23-omniroute-vps-tunnel-guide.md\n?? raw/2026-10-28-headroom-containers-harness.md\n?? raw/2026-10-29-claude-code-agent-monitor-ccam.md\n?? wiki/concepts/claude-mem.md\n?? wiki/concepts/codegraph.md\n?? wiki/concepts/rubric-memory-page.md",
+      "error": ""
+    },
+    "staged": {
+      "code": 0,
+      "stdout": "",
+      "error": ""
+    }
+  },
+  "boundaries": {
+    "installed_imports": false,
+    "real_key_bytes_read": false,
+    "registry_constructor_or_sqlite_open": false,
+    "health_or_bootstrap_requests": false,
+    "operational_backup": false,
+    "installed_writes": false,
+    "provider_calls": 0,
+    "acl_or_profile_changes": false
+  },
+  "installed_pid_command_verified": false,
+  "active_engine_mounts_verified": false,
+  "canonical_existing_changes_preserved": true,
+  "canonical_index_empty": true,
+  "out_of_scope_observations": {
+    "canonical_added_untracked": "wiki/concepts/codegraph.md",
+    "global_codex_config_sha256_before": "c4f4670c8d8d655d018765bf6f5fb58c7650d80769bdf1b179d4ca4529f2bbf1",
+    "global_codex_config_sha256_after": "b0d1552848451341a13c96cfc19adb1da2f34da95f3481bce67b05404e247daa",
+    "selected_voice_mcp_entries_changed": false,
+    "origin_attributed": false,
+    "restored_or_modified_by_this_task": false
+  }
+}

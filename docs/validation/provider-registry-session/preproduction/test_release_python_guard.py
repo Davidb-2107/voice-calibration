@@ -216,13 +216,14 @@ class OperatorRuntimeTests(unittest.TestCase):
         self.addCleanup(fixture.doCleanups)
         fixture.config['registryPython'] = peer
         fixture.save_config()
-        result = subprocess.run([sys.executable,'-B',str(fixture.root / 'control.py'),'start'],
+        result = subprocess.run([sys.executable,'-I','-B',str(fixture.root / 'control.py'),'start'],
                                 capture_output=True,text=True,timeout=15)
-        record_runtime_case('reject-different312',[sys.executable,'-B',str(fixture.root / 'control.py'),'start'],result,
+        record_runtime_case('reject-different312',[sys.executable,'-I','-B',str(fixture.root / 'control.py'),'start'],result,
                             configured_peer=peer,recovery_called=(fixture.root / 'recovery-called').exists(),
                             service_started=(fixture.root / 'service.log').exists())
         self.assertNotEqual(result.returncode,0)
         self.assertFalse((fixture.root / 'recovery-called').exists(),result.stderr)
+        self.assertFalse((fixture.root / 'service.log').exists(),result.stderr)
         self.assertIn('same operator interpreter',result.stderr)
 
 

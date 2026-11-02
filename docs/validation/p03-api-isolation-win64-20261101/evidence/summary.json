@@ -1,0 +1,77 @@
+{
+  "schema": "p03-windows-api-qualification-v1",
+  "observed_at": "2026-11-01T22:38:14.580338+00:00",
+  "result": "PASS within isolated synthetic context",
+  "candidate": {
+    "root": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6",
+    "control": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control",
+    "python": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\runtime\\python.exe",
+    "node": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+    "api_port": 56812,
+    "health_port": 56813,
+    "profile": "codex.p03.14835f89b05d4f8aaca4f8efaab69b1c",
+    "appcontainer_sid": "S-1-15-2-860835225-4181535305-3029450072-4145968142-1775768310-2301365668-2372544436",
+    "api_runtime_hash": "b850001a2762237716f58f3e5bd7cc4cb4d4b8286e666025379d3b0f4b67133f",
+    "trace": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\state\\business-entry.trace",
+    "source": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-worktrees\\p03-internal-finance-service",
+    "installed_modified": false
+  },
+  "native_cases": [
+    "nominal",
+    "automatic-restart",
+    "fresh-authority-process",
+    "node24-before-entry",
+    "compiled-api-before-entry",
+    "api-positive-control",
+    "mcp-source-before-import",
+    "mcp-positive-control",
+    "mcp-cache-before-import",
+    "restored-after-counterproofs"
+  ],
+  "actual_primary_token_operations": [
+    {
+      "denied": 32,
+      "allowed": 2
+    },
+    {
+      "denied": 32,
+      "allowed": 2
+    },
+    {
+      "denied": 32,
+      "allowed": 2
+    },
+    {
+      "denied": 32,
+      "allowed": 2
+    }
+  ],
+  "node_contracts": {
+    "pass": 347,
+    "fail": 0,
+    "skip": 1
+  },
+  "financial_tests": {
+    "clean_venv": 85,
+    "frozen_dependencies": 85
+  },
+  "operator_tests": {
+    "pass": 50,
+    "skip": 3,
+    "subtests_pass": 20
+  },
+  "private_channel_tests": 4,
+  "offline_guard_tests": 8,
+  "review_findings": {
+    "critical": 0,
+    "important_fixed": 2,
+    "minor_fixed": 1,
+    "second_review": false
+  },
+  "provider_emissions": 0,
+  "installed_writes": false,
+  "operational_backup": false,
+  "financial_activation": false,
+  "push": false,
+  "cleanup": false
+}

@@ -1,0 +1,14 @@
+{
+  "root": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6",
+  "control": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\control",
+  "python": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\authority\\runtime\\python.exe",
+  "node": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+  "api_port": 56812,
+  "health_port": 56813,
+  "profile": "codex.p03.14835f89b05d4f8aaca4f8efaab69b1c",
+  "appcontainer_sid": "S-1-15-2-860835225-4181535305-3029450072-4145968142-1775768310-2301365668-2372544436",
+  "api_runtime_hash": "b850001a2762237716f58f3e5bd7cc4cb4d4b8286e666025379d3b0f4b67133f",
+  "trace": "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\state\\business-entry.trace",
+  "source": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-worktrees\\p03-internal-finance-service",
+  "installed_modified": false
+}

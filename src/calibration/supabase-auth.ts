@@ -176,32 +176,14 @@ export function createSupabaseWorkspaceResolver(
   };
 }
 
-export async function startSupabaseCalibrationApi(
-  options: {
-    supabase: SupabaseAuthOptions;
-    workspaces: readonly TenantWorkspaceOptions[];
-    host?: string;
-    port?: number;
-    publicOrigin?: string;
-    allowUnisolatedLocal?: boolean;
-    providerMode?: "simulated" | "elevenlabs";
-    jobQueue?: { dataDir: string; maxConcurrentJobs?: number };
-    financialPreflight?: (workspaceId: string) => Promise<void>;
-    requireFinancialPreflight?: boolean;
-  } & EngineManagerOptions,
-): Promise<CalibrationUiHandle> {
-  const financialPreflight = options.financialPreflight;
-  if (
-    (financialPreflight !== undefined && typeof financialPreflight !== "function") ||
-    (options.requireFinancialPreflight === true && !financialPreflight)
-  )
-    throw new Error("Financial preflight controller required before startup");
+export function validateIsolatedWorkspaces(options: {
+  workspaces: readonly TenantWorkspaceOptions[];
+  host?: string;
+  publicOrigin?: string;
+  allowUnisolatedLocal?: boolean;
+  jobQueue?: { dataDir: string };
+}): readonly TenantWorkspaceOptions[] {
   const host = options.host ?? "127.0.0.1";
-  if (options.publicOrigin) {
-    const origin = new URL(options.publicOrigin);
-    if (origin.protocol !== "https:" || origin.origin !== options.publicOrigin)
-      throw new Error("publicOrigin must be an HTTPS origin");
-  } else if (!isLoopbackHost(host)) throw new Error("Network API requires an explicit HTTPS publicOrigin");
   const fixed = validateTenantWorkspaces(options.workspaces);
   for (const workspace of fixed) {
     const transport = workspace.mcpTransport;
@@ -258,6 +240,37 @@ export async function startSupabaseCalibrationApi(
         if (contains(queueDir, path) || contains(path, queueDir))
           throw new Error("Queue directory overlaps workspace resources");
   }
+  return fixed;
+}
+
+export async function startSupabaseCalibrationApi(
+  options: {
+    supabase: SupabaseAuthOptions;
+    workspaces: readonly TenantWorkspaceOptions[];
+    host?: string;
+    port?: number;
+    deferListen?: boolean;
+    publicOrigin?: string;
+    allowUnisolatedLocal?: boolean;
+    providerMode?: "simulated" | "elevenlabs";
+    jobQueue?: { dataDir: string; maxConcurrentJobs?: number };
+    financialPreflight?: (workspaceId: string) => Promise<void>;
+    requireFinancialPreflight?: boolean;
+  } & EngineManagerOptions,
+): Promise<CalibrationUiHandle> {
+  const financialPreflight = options.financialPreflight;
+  if (
+    (financialPreflight !== undefined && typeof financialPreflight !== "function") ||
+    (options.requireFinancialPreflight === true && !financialPreflight)
+  )
+    throw new Error("Financial preflight controller required before startup");
+  const host = options.host ?? "127.0.0.1";
+  if (options.publicOrigin) {
+    const origin = new URL(options.publicOrigin);
+    if (origin.protocol !== "https:" || origin.origin !== options.publicOrigin)
+      throw new Error("publicOrigin must be an HTTPS origin");
+  } else if (!isLoopbackHost(host)) throw new Error("Network API requires an explicit HTTPS publicOrigin");
+  const fixed = validateIsolatedWorkspaces(options);
   // Validate auth configuration before any credentials, files or child processes are opened.
   createSupabaseWorkspaceResolver(options.supabase, []);
   const engines = new EngineManager(
@@ -270,7 +283,7 @@ export async function startSupabaseCalibrationApi(
           providerMode: options.providerMode,
           mcpTransport:
             workspace.mcpTransport instanceof DockerMcpStdioTransport
-              ? new DockerMcpStdioTransport(workspace.mcpTransport.binding)
+              ? workspace.mcpTransport.fork()
               : workspace.mcpTransport,
         });
         try {
@@ -305,6 +318,7 @@ export async function startSupabaseCalibrationApi(
     return await startCalibrationUi({
       host,
       port: options.port ?? 0,
+      deferListen: options.deferListen,
       allowNetwork: true,
       publicOrigin: options.publicOrigin,
       closeApplications,

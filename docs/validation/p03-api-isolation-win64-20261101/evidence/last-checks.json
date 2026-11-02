@@ -1,0 +1,64 @@
+[
+  {
+    "name": "frozen-financial-regressions",
+    "command": [
+      "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\test-python\\python.exe",
+      "-I",
+      "-B",
+      "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\run_frozen_financials.py"
+    ],
+    "cwd": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101",
+    "returncode": 0,
+    "log": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\frozen-financial-regressions.log"
+  },
+  {
+    "name": "offline-network-final",
+    "command": [
+      "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\ci-venv\\Scripts\\python.exe",
+      "-B",
+      "-m",
+      "pytest",
+      "-q",
+      "test_provider_network_guard.py"
+    ],
+    "cwd": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-worktrees\\p03-internal-finance-vault\\Shared\\voice-calibration",
+    "returncode": 0,
+    "log": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\offline-network-final.log"
+  },
+  {
+    "name": "typecheck-final",
+    "command": [
+      "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+      "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\build-service\\node_modules\\typescript\\bin\\tsc",
+      "--noEmit"
+    ],
+    "cwd": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\build-service",
+    "returncode": 0,
+    "log": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\typecheck-final.log"
+  },
+  {
+    "name": "lint-final",
+    "command": [
+      "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-api-guarded-20261101-r6\\code\\node.exe",
+      "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\build-service\\node_modules\\@biomejs\\biome\\bin\\biome",
+      "ci",
+      "--formatter-enabled=false",
+      "."
+    ],
+    "cwd": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\build-service",
+    "returncode": 0,
+    "log": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\lint-final.log"
+  },
+  {
+    "name": "source-syntax-final",
+    "command": [
+      "C:\\Users\\dbele\\.codex\\venvs\\wiki-claude\\Scripts\\python.exe",
+      "-I",
+      "-B",
+      "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\check_sources.py"
+    ],
+    "cwd": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101",
+    "returncode": 0,
+    "log": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\source-syntax-final.log"
+  }
+]

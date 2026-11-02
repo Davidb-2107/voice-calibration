@@ -1,0 +1,32 @@
+[
+  {
+    "name": "operator-final",
+    "command": [
+      "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\ci-venv\\Scripts\\python.exe",
+      "-I",
+      "-B",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      ".",
+      "-p",
+      "test_api_*.py",
+      "-v"
+    ],
+    "cwd": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-worktrees\\p03-internal-finance-service\\docs\\validation\\provider-registry-session\\preproduction",
+    "returncode": 0,
+    "log": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\operator-final.log"
+  },
+  {
+    "name": "node-contracts-ci-venv",
+    "command": [
+      "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-24ceb431-6f9361ce-api-native\\node\\node-v22.23.4-win-x64\\node.exe",
+      "C:\\Users\\dbele\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-3\\preproduction\\releases\\p03-24ceb431-6f9361ce-api-native\\node\\node-v22.23.4-win-x64\\node_modules\\npm\\bin\\npm-cli.js",
+      "test"
+    ],
+    "cwd": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\build-service",
+    "returncode": 0,
+    "log": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\node-contracts-ci-venv.log"
+  }
+]

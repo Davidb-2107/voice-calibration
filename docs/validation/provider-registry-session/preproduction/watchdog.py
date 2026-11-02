@@ -4,12 +4,16 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+if __name__ == '__main__' and (not sys.flags.isolated or not sys.dont_write_bytecode
+        or (Path(__file__).resolve().parent / '__pycache__').exists()
+        or list(Path(__file__).resolve().parent.glob('*.pyc'))):
+    raise RuntimeError('Operator runtime requires Python 3.12 with -I -B and no operator bytecode cache')
 import time
 import urllib.error
 import urllib.request
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from operator_runtime import operator_python
-from filelock import FileLock
+from api_authority import operator_lock
 from recover_owner import checked
 
 HERE = Path(__file__).resolve().parent
@@ -48,14 +52,15 @@ def tick(root):
         pass
     # control.py proves death; an unhealthy but live owner is never killed.
     try:
-        result = subprocess.run([interpreter, str(root / 'control.py'), 'start', '--automatic'],
+        result = subprocess.run([interpreter, '-I', '-B', str(root / 'control.py'), 'start', '--automatic'],
                                 capture_output=True, text=True, timeout=90)
     except (OSError, subprocess.TimeoutExpired):
         return 'blocked'
     return 'restarted' if result.returncode == 0 else 'blocked'
 
 def main(root):
-    with FileLock(str(checked(root / 'watchdog.lock')), timeout=0):
+    checked(root / 'watchdog.lock')
+    with operator_lock(root, 'watchdog.lock', 0):
         (root / 'watchdog.ready').write_text(json.dumps({'pid': os.getpid(), 'bootId': boot_id()}))
         while not (root / 'watchdog.stop').exists():
             state = tick(root)

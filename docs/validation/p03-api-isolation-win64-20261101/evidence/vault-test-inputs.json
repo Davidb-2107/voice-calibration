@@ -1,0 +1,17 @@
+[
+  {
+    "path": "Shared/voice-calibration/tests/reusable_engine_fixture.py",
+    "sha256": "1ed298c50371caceb7e81e133802fcf981e4d19c0450aa6ca0a4d41011f2a658",
+    "scope": "test fixture only; no packaged SDK business code changed"
+  },
+  {
+    "path": "Shared/voice-calibration/tests/provider_network_guard.py",
+    "sha256": "6a46e368ce7ed6ef645b5c0f109cf030a2e049666e52417b7eccfcfc5e2c09a1",
+    "scope": "test fixture only; no packaged SDK business code changed"
+  },
+  {
+    "path": "Shared/voice-calibration/test_provider_network_guard.py",
+    "sha256": "14dca1e62a6feb111a3ebd9ad29dd7784d4ad82d084994812595bbae26b90c65",
+    "scope": "test fixture only; no packaged SDK business code changed"
+  }
+]

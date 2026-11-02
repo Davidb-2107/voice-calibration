@@ -1,0 +1,12 @@
+{
+  "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+  "executable": "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\test-python\\python.exe",
+  "packages": {
+    "voice-calibration": "0.2.0",
+    "pydantic": "2.13.4",
+    "requests": "2.34.2",
+    "filelock": "3.32.0",
+    "mcp": "1.29.0",
+    "pytest": "9.1.1"
+  }
+}

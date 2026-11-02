@@ -46,7 +46,7 @@ const health = createServer(async (request, response) => {
     await promisify(execFile)('docker', ['image', 'inspect', config.image], { timeout: 10000, windowsHide: true });
     const owner = JSON.parse(readFileSync(join(config.jobQueue.dataDir, 'owner.lock'), 'utf8'));
     const registryCheck = await promisify(execFile)(config.registryPython,
-      [join(control, 'provider_registry_status.py'), process.argv[2]], { timeout: 10000, windowsHide: true });
+      ['-I', '-B', join(control, 'provider_registry_status.py'), process.argv[2]], { timeout: 10000, windowsHide: true });
     const registry = JSON.parse(registryCheck.stdout);
     const executionReady = config.workspaces.every(workspace =>
       JSON.parse(readFileSync(join(workspace.engine.restoreGuardDir, 'guard.json'), 'utf8')).state === 'ready');

@@ -7,6 +7,9 @@ import re
 import sys
 
 HERE = Path(__file__).resolve().parent
+if __name__ == '__main__' and (not sys.flags.isolated or not sys.dont_write_bytecode
+        or (HERE / '__pycache__').exists() or list(HERE.glob('*.pyc'))):
+    raise RuntimeError('Financial reader requires Python 3.12 with -I -B and source-only operator imports')
 # -I ignores the candidate's CWD/PYTHONPATH; only this trusted control directory is added.
 sys.path.insert(0, str(HERE))
 from operator_runtime import operator_python

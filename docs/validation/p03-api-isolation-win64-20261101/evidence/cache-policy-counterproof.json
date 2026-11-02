@@ -1,0 +1,43 @@
+{
+  "result": "PASS",
+  "scope": "Mutable disposable test SDK only; no qualified artifact writes",
+  "runs": [
+    {
+      "command": [
+        "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\test-python\\python.exe",
+        "-I",
+        "-B",
+        "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\compile_cache_fixture.py"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "",
+      "marker_exists": false
+    },
+    {
+      "command": [
+        "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\test-python\\python.exe",
+        "-I",
+        "-B",
+        "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\cache_policy_probe.py"
+      ],
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\cache_policy_probe.py\", line 5, in <module>\n    import p03_cache_fixture\n  File \"C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\test-python\\Lib\\site-packages\\p03_cache_fixture.py\", line 3, in <module>\nRuntimeError: UNQUALIFIED_CACHE_LOADED\n",
+      "marker_exists": true
+    },
+    {
+      "command": [
+        "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\test-python\\python.exe",
+        "-I",
+        "-B",
+        "C:\\Users\\dbele\\.codex\\worktrees\\1394\\Wiki_Claude\\.scratch\\p03-integration\\api-isolation-fix-20261101\\cache_policy_probe.py",
+        "--policy"
+      ],
+      "returncode": 0,
+      "stdout": "{\"value\": \"SOURCE\", \"isolated\": 1, \"no_cache_write\": true, \"python\": \"C:\\\\Users\\\\dbele\\\\.codex\\\\worktrees\\\\1394\\\\Wiki_Claude\\\\.scratch\\\\p03-integration\\\\api-isolation-fix-20261101\\\\test-python\\\\python.exe\"}\n",
+      "stderr": "",
+      "marker_exists": false
+    }
+  ]
+}
