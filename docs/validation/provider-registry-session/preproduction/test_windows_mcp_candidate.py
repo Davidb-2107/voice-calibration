@@ -89,7 +89,7 @@ class WindowsMcpCandidateTests(unittest.TestCase):
         source.write_text(''.join(lines), encoding='utf-8')
         return marker
 
-    def candidate(self, visible_key=False, sdk_root=None, altered_runtime=False, instrument=True):
+    def candidate(self, visible_key=False, sdk_root=None, altered_runtime=False, instrument=True, guard_name='guard.json'):
         import windows_candidate
         import windows_mcp_candidate as module
         root = Path(os.environ['P03_MCP_TEST_PARENT']) / uuid.uuid4().hex
@@ -104,7 +104,7 @@ class WindowsMcpCandidateTests(unittest.TestCase):
         corpus = candidate.state / 'corpus/voice_wpm.json'
         corpus.parent.mkdir()
         corpus.write_text('{}', encoding='utf-8')
-        guard = candidate._authority / 'guard.json'
+        guard = candidate._authority / guard_name
         guard.write_text(json.dumps({'version': 1, 'workspace_id': 'mcp-fixture', 'state': 'ready'}), encoding='utf-8')
         control = candidate._authority / 'dataset-control'
         control.mkdir()
@@ -248,8 +248,8 @@ class WindowsMcpCandidateTests(unittest.TestCase):
         self.assertFalse((candidate._authority / 'mcp-session.json').exists())
 
     def test_checkpoint_only_authority_refuses_before_business_import(self):
-        candidate, command = self.candidate()
-        checkpoint = candidate._authority / 'dataset-control/guard.corpus-checkpoint.json'
+        candidate, command = self.candidate(guard_name='deployment.json')
+        checkpoint = candidate._authority / 'dataset-control/deployment.corpus-checkpoint.json'
         checkpoint.write_text(json.dumps({'schema': 'dataset-corpus-checkpoint-v1', 'state': 'ready'}), encoding='utf-8')
         run = subprocess.run(command, input=b'', capture_output=True, timeout=60)
         self.record(candidate, {'returncode': run.returncode, 'stderr': run.stderr.decode('utf-8', 'replace')})
