@@ -11,6 +11,7 @@ import operator_runtime  # Reject unsupported Python before business dependencie
 
 import ctypes as c
 from ctypes import wintypes as w
+from contextlib import contextmanager
 import hashlib
 import hmac
 import json
@@ -20,6 +21,40 @@ import subprocess
 import threading
 import time
 import uuid
+
+
+def _startup_trace(phase, event, error=None, candidate_pid=None):
+    record = {'schema': 'windows-candidate-startup-v1', 'time_ns': time.time_ns(),
+              'pid': os.getpid(), 'phase': phase, 'event': event}
+    if candidate_pid is not None:
+        record['candidate_pid'] = candidate_pid
+    if error is not None:
+        chain, seen = [], set()
+        while error is not None and id(error) not in seen and len(chain) < 8:
+            seen.add(id(error))
+            winerror = getattr(error, 'winerror', None)
+            chain.append({'type': type(error).__name__,
+                          'winerror': winerror if type(winerror) is int else None})
+            error = error.__cause__ if error.__cause__ is not None else (
+                None if error.__suppress_context__ else error.__context__)
+        record.update(error_chain=chain, chain_truncated=error is not None)
+    try:
+        # Messages, paths, arguments and environment values never enter this sink.
+        print(json.dumps(record, separators=(',', ':')), file=sys.stderr, flush=True)
+    except (OSError, ValueError):
+        pass  # A closed diagnostic pipe must not change admission or process ownership.
+
+
+@contextmanager
+def _startup_phase(phase):
+    _startup_trace(phase, 'begin')
+    try:
+        yield
+    except BaseException as error:
+        _startup_trace(phase, 'refused', error)
+        raise
+    else:
+        _startup_trace(phase, 'passed')
 
 
 class _Startup(c.Structure):
@@ -220,83 +255,100 @@ class _Windows:
     def spawn(self, command, environment, cwd, profile, app_sid, authority_identity, locks):
         import msvcrt
         sid = c.c_void_p()
-        hr = self.userenv.DeriveAppContainerSidFromAppContainerName(profile, c.byref(sid))
-        if hr != 0:
-            raise RuntimeError(f'Cannot resolve qualified AppContainer: {hr & 0xffffffff:#x}')
+        with _startup_phase('resolve_appcontainer'):
+            hr = self.userenv.DeriveAppContainerSidFromAppContainerName(profile, c.byref(sid))
+            if hr != 0:
+                raise RuntimeError(f'Cannot resolve qualified AppContainer: {hr & 0xffffffff:#x}')
         handles, streams = [], []
         attributes = None
         info = _ProcessInfo()
         job = None
         success = False
         try:
-            if self.sid_text(sid) != app_sid:
-                raise RuntimeError('AppContainer identity changed')
+            with _startup_phase('appcontainer_identity'):
+                if self.sid_text(sid) != app_sid:
+                    raise RuntimeError('AppContainer identity changed')
             pipes = []
             inherit = _SecurityAttributes(c.sizeof(_SecurityAttributes), None, True)
             for child_reads in (True, False, False):
                 read, write = w.HANDLE(), w.HANDLE()
-                self.check(self.kernel.CreatePipe(c.byref(read), c.byref(write), c.byref(inherit), 0))
+                with _startup_phase('CreatePipe'):
+                    self.check(self.kernel.CreatePipe(c.byref(read), c.byref(write), c.byref(inherit), 0))
                 handles.extend((read.value, write.value))
                 child, parent = (read.value, write.value) if child_reads else (write.value, read.value)
-                self.check(self.kernel.SetHandleInformation(parent, 1, 0))
+                with _startup_phase('SetHandleInformation'):
+                    self.check(self.kernel.SetHandleInformation(parent, 1, 0))
                 pipes.append((child, parent))
             size = c.c_size_t()
-            self.kernel.InitializeProcThreadAttributeList(None, 2, 0, c.byref(size))
-            attributes = c.create_string_buffer(size.value)
-            self.check(self.kernel.InitializeProcThreadAttributeList(attributes, 2, 0, c.byref(size)))
+            with _startup_phase('InitializeProcThreadAttributeList'):
+                self.kernel.InitializeProcThreadAttributeList(None, 2, 0, c.byref(size))
+                attributes = c.create_string_buffer(size.value)
+                self.check(self.kernel.InitializeProcThreadAttributeList(attributes, 2, 0, c.byref(size)))
             caps = _Capabilities(sid, None, 0, 0)
             inherited = (w.HANDLE * 3)(*(pair[0] for pair in pipes))
-            self.check(self.kernel.UpdateProcThreadAttribute(attributes, 0, 0x20009, c.byref(caps), c.sizeof(caps), None, None))
-            self.check(self.kernel.UpdateProcThreadAttribute(attributes, 0, 0x20002, inherited, c.sizeof(inherited), None, None))
+            with _startup_phase('security_capabilities'):
+                self.check(self.kernel.UpdateProcThreadAttribute(attributes, 0, 0x20009, c.byref(caps), c.sizeof(caps), None, None))
+            with _startup_phase('inherited_handles'):
+                self.check(self.kernel.UpdateProcThreadAttribute(attributes, 0, 0x20002, inherited, c.sizeof(inherited), None, None))
             startup = _StartupEx()
             startup.startup.cb = c.sizeof(startup)
             startup.startup.flags = 0x100
             startup.startup.stdin, startup.startup.stdout, startup.startup.stderr = (pair[0] for pair in pipes)
             startup.attributes = c.cast(attributes, c.c_void_p)
-            job = self.check(self.kernel.CreateJobObjectW(None, None))
+            with _startup_phase('CreateJobObjectW'):
+                job = self.check(self.kernel.CreateJobObjectW(None, None))
             limits = _JobLimits()
             limits.basic.flags = 0x2000  # Kill only this fixture's descendants on close.
-            self.check(self.kernel.SetInformationJobObject(job, 9, c.byref(limits), c.sizeof(limits)))
-            cmdline = c.create_unicode_buffer(subprocess.list2cmdline(command))
-            block = c.create_unicode_buffer('\0'.join(key+'='+value for key, value in sorted(environment.items()))+'\0\0')
+            with _startup_phase('SetInformationJobObject'):
+                self.check(self.kernel.SetInformationJobObject(job, 9, c.byref(limits), c.sizeof(limits)))
+            with _startup_phase('prepare_command'):
+                cmdline = c.create_unicode_buffer(subprocess.list2cmdline(command))
+                block = c.create_unicode_buffer('\0'.join(key+'='+value for key, value in sorted(environment.items()))+'\0\0')
             flags = 0x80000 | 0x8000000 | 0x400 | 0x4
-            self.check(self.kernel.CreateProcessW(command[0], cmdline, None, None, True, flags,
-                                                 block, str(cwd), c.byref(startup), c.byref(info)))
-            self.check(self.kernel.AssignProcessToJobObject(job, info.process))
-            identity = self.identity(info.process)
-            if (not identity['is_appcontainer'] or identity['appcontainer_sid'] != app_sid
-                    or identity['integrity_sid'] != 'S-1-16-4096' or identity['capability_count'] != 0
-                    or identity['user_sid'] != authority_identity['user_sid']):
-                raise RuntimeError('Candidate token does not match the qualified isolated identity')
-            for index, (child, parent) in enumerate(pipes):
-                self.kernel.CloseHandle(child)
-                handles.remove(child)
-                flags = os.O_BINARY | (os.O_WRONLY if index == 0 else os.O_RDONLY)
-                descriptor = msvcrt.open_osfhandle(parent, flags)
-                handles.remove(parent)
-                streams.append(os.fdopen(descriptor, 'wb' if index == 0 else 'rb', buffering=0))
-            if self.kernel.ResumeThread(info.thread) != 1:
-                raise RuntimeError('Candidate was not safely suspended before resume')
+            with _startup_phase('CreateProcessW'):
+                self.check(self.kernel.CreateProcessW(command[0], cmdline, None, None, True, flags,
+                                                     block, str(cwd), c.byref(startup), c.byref(info)))
+            _startup_trace('CreateProcessW', 'created', candidate_pid=info.pid)
+            with _startup_phase('AssignProcessToJobObject'):
+                self.check(self.kernel.AssignProcessToJobObject(job, info.process))
+            with _startup_phase('effective_token'):
+                identity = self.identity(info.process)
+                if (not identity['is_appcontainer'] or identity['appcontainer_sid'] != app_sid
+                        or identity['integrity_sid'] != 'S-1-16-4096' or identity['capability_count'] != 0
+                        or identity['user_sid'] != authority_identity['user_sid']):
+                    raise RuntimeError('Candidate token does not match the qualified isolated identity')
+            with _startup_phase('parent_streams'):
+                for index, (child, parent) in enumerate(pipes):
+                    self.kernel.CloseHandle(child)
+                    handles.remove(child)
+                    flags = os.O_BINARY | (os.O_WRONLY if index == 0 else os.O_RDONLY)
+                    descriptor = msvcrt.open_osfhandle(parent, flags)
+                    handles.remove(parent)
+                    streams.append(os.fdopen(descriptor, 'wb' if index == 0 else 'rb', buffering=0))
+            with _startup_phase('ResumeThread'):
+                if self.kernel.ResumeThread(info.thread) != 1:
+                    raise RuntimeError('Candidate was not safely suspended before resume')
             process = RunningCandidate(self, info.process, job, info.pid, identity, streams, locks)
             success = True
             return process
         finally:
-            if info.thread:
-                self.kernel.CloseHandle(info.thread)
-            if not success:
-                if info.process:
-                    self.kernel.TerminateProcess(info.process, 1)
-                    self.kernel.WaitForSingleObject(info.process, 5000)
-                    self.kernel.CloseHandle(info.process)
-                if job:
-                    self.kernel.CloseHandle(job)
-                for stream in streams:
-                    stream.close()
-            for handle in handles:
-                self.kernel.CloseHandle(handle)
-            if attributes:
-                self.kernel.DeleteProcThreadAttributeList(attributes)
-            self.security.FreeSid(sid)
+            with _startup_phase('native_cleanup'):
+                if info.thread:
+                    self.kernel.CloseHandle(info.thread)
+                if not success:
+                    if info.process:
+                        self.kernel.TerminateProcess(info.process, 1)
+                        self.kernel.WaitForSingleObject(info.process, 5000)
+                        self.kernel.CloseHandle(info.process)
+                    if job:
+                        self.kernel.CloseHandle(job)
+                    for stream in streams:
+                        stream.close()
+                for handle in handles:
+                    self.kernel.CloseHandle(handle)
+                if attributes:
+                    self.kernel.DeleteProcThreadAttributeList(attributes)
+                self.security.FreeSid(sid)
 
 
 class RunningCandidate:
@@ -572,24 +624,30 @@ class WindowsCandidate:
         return payload
 
     def start(self):
-        self._check_authority()
-        if not self._manifest.is_file():
-            raise RuntimeError('Candidate has no qualified target')
-        locks = []
-        try:
-            payload = self._load_payload()
-            if self._snapshot(locks) != payload['code']:
-                raise RuntimeError('Qualified candidate code or protection changed')
-            process = self._api.spawn(payload['argv'], payload['env'], self.state, self._profile,
-                                      self.appcontainer_sid, self.authority_identity, locks)
-            self.launches += 1
-            return process
-        except (KeyError, TypeError, ValueError, OSError) as error:
-            raise RuntimeError('Candidate qualification or isolated startup failed') from error
-        finally:
-            if 'process' not in locals():
-                for handle in locks:
-                    self._api.kernel.CloseHandle(handle)
+        with _startup_phase('start'):
+            with _startup_phase('authority_check'):
+                self._check_authority()
+            locks = []
+            try:
+                with _startup_phase('manifest_read'):
+                    if not self._manifest.is_file():
+                        raise RuntimeError('Candidate has no qualified target')
+                    payload = self._load_payload()
+                with _startup_phase('code_snapshot'):
+                    if self._snapshot(locks) != payload['code']:
+                        raise RuntimeError('Qualified candidate code or protection changed')
+                with _startup_phase('spawn'):
+                    process = self._api.spawn(payload['argv'], payload['env'], self.state, self._profile,
+                                              self.appcontainer_sid, self.authority_identity, locks)
+                self.launches += 1
+                return process
+            except (KeyError, TypeError, ValueError, OSError) as error:
+                raise RuntimeError('Candidate qualification or isolated startup failed') from error
+            finally:
+                if 'process' not in locals():
+                    with _startup_phase('release_code_locks'):
+                        for handle in locks:
+                            self._api.kernel.CloseHandle(handle)
 
 
 def main():
