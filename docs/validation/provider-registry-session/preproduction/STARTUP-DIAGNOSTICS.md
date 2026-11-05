@@ -61,3 +61,34 @@ de préparation ; les fixtures sont dans `temp/p03-startup-final-20261104`.
 L'installation,
 ses fichiers et droits n'ont pas été modifiés. NO-GO maintenu jusqu'à une nouvelle
 qualification opérationnelle autorisée.
+
+## Correctif du contexte S4U du 5 novembre 2026
+
+Le refus `CreateProcessW / WinError 2` a été reproduit en session Windows 0
+par la même sonde Node qui passe en session interactive. Les chemins de profil,
+la version Node et les empreintes du programme sont identiques.
+La simple dérivation du SID ne garantit pas l'enregistrement du profil dans le
+contexte S4U. L'appel `CreateAppContainerProfile` y a renvoyé `S_OK` pour le nom
+déjà qualifié en session interactive. Cet enregistrement fait passer la création
+native, puis Node échoue avec `0xC0000142` sur la station non interactive.
+Une station et un bureau privés font alors passer la lecture de version.
+
+Le lanceur enregistre désormais le profil dans son contexte effectif et vérifie
+le SID obtenu avant de créer un processus. En session 0, il crée des objets USER
+neufs, réservés à l'autorité et à cet AppContainer. Le bureau est explicite dans
+`STARTUPINFO`. Les droits des stations et bureaux existants sont préservés.
+La sélection temporaire de station est sérialisée et la station de l'autorité
+est restaurée avant la création du fils. Les objets privés restent ouverts
+jusqu'à la sortie du processus et de son Job Object, ou sont fermés au refus.
+
+Le code partagé corrigé a passé deux lancements S4U distincts avec Node 22.23.4,
+AppContainer d'intégrité basse et zéro capacité. Deux autres essais S4U ont
+confirmé les refus simulés de création native et d'affectation au Job Object,
+sans entrée dans le programme et sans enfant vivant après refus.
+Les tests ciblés sont dans `test_windows_launch_context.py`.
+
+Ces preuves portent sur une sonde de version isolée. Le démarrage de l'API et du
+MCP installés, leur composition et leur reconnexion restent à qualifier dans une
+fenêtre distincte autorisée. Le refus historique du 4 novembre au matin demeure
+indéterminé. Les observations instrumentées du soir et la reproduction S4U
+étayent ce correctif.

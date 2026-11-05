@@ -1,0 +1,63 @@
+{
+  "schema": "windows-launch-context-qualification-v1",
+  "service_base_commit": "c01995ba0853a2291d7f346fb4db68cd9241fcb2",
+  "vault_commit": "99c8709007e6573d0d823e00845b4feb3c269266",
+  "python": "3.12.10",
+  "node": "22.23.4",
+  "node_sha256": "dccc52de28d8df2ee22d2062424f8c563070d95d8ad70c54c4bf01d590dec14f",
+  "launcher_source_sha256": "fea3a116772d9db250bc477a48b54c11cbbef195145a42a0267f4447ceee50d7",
+  "scope": "isolated fixed Node version program under S4U",
+  "session_id": 0,
+  "authority_is_appcontainer": false,
+  "candidate_is_appcontainer": true,
+  "candidate_integrity_sid": "S-1-16-4096",
+  "candidate_capability_count": 0,
+  "source_qualification": [
+    {
+      "run": 7,
+      "kind": "start",
+      "result": "PASS",
+      "receipt": "s4u-result-bc233155ce18431fb5108a831a970545.json",
+      "receipt_sha256": "66aa3471906b2b28c9f649740f78a3a53c3e926f04e4e6ff390b0cbf11dadc41"
+    },
+    {
+      "run": 8,
+      "kind": "restart",
+      "result": "PASS",
+      "receipt": "s4u-result-61163f76ffc24857bc859b7c873c9e29.json",
+      "receipt_sha256": "24aa0eee9ef3b5063b7322dd4eddcf42742f63e748d9ad091c818534f9052f44"
+    },
+    {
+      "run": 9,
+      "kind": "CreateProcessW refusal",
+      "result": "PASS",
+      "no_business_entry": true,
+      "no_live_child": true,
+      "receipt": "s4u-result-2e9ebe395db04bb598c8c042e63c91ad.json",
+      "receipt_sha256": "9d400e0c0f17607cbdd0aa3fee5f4d7d802a73a04e1448bf9d1d480e2e8dab85"
+    },
+    {
+      "run": 10,
+      "kind": "AssignProcessToJobObject refusal",
+      "result": "PASS",
+      "no_business_entry": true,
+      "no_live_child": true,
+      "receipt": "s4u-result-9ba8ddb34325474ba727720d0efa9834.json",
+      "receipt_sha256": "49c3a84a1dce46c31dd2e8d034eac16528b722939ba454e2637178cf1b5c2c03"
+    }
+  ],
+  "local_tests": {
+    "test_windows_launch_context": 8,
+    "test_windows_candidate": 18,
+    "test_startup_trace": 5,
+    "test_api_node_binding": 2,
+    "test_windows_mcp_candidate": 12,
+    "failures": 0,
+    "skipped": 0
+  },
+  "provider_calls": 0,
+  "diagnostic_runs_used": 10,
+  "diagnostic_task_enabled": false,
+  "installed_cutover_performed": false,
+  "installed_qualification": "NO_GO"
+}
