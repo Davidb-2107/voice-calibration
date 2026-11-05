@@ -128,6 +128,49 @@ class NativeRefusalTraceTests(unittest.TestCase):
     def test_job_assignment_refusal_reaps_the_suspended_process(self):
         self.refusal('AssignProcessToJobObject')
 
+    def test_desktop_cleanup_refusal_still_releases_other_native_resources(self):
+        candidate, node = self.candidate()
+        script = self.script(candidate, 'business.js', 'process.exit(0);')
+        candidate.qualify([str(node), '--preserve-symlinks', '--preserve-symlinks-main', str(script)])
+        kernel = candidate._api.kernel
+        security = candidate._api.security
+        original_pipe, original_close = kernel.CreatePipe, kernel.CloseHandle
+        pipes = []
+
+        def create_pipe(*arguments):
+            result = original_pipe(*arguments)
+            if result:
+                pipes.extend([arguments[0]._obj.value, arguments[1]._obj.value])
+            return result
+
+        def refuse(*arguments):
+            raise OSError('simulated native refusal')
+
+        def closed_handles():
+            return {getattr(call.args[0], 'value', call.args[0]) for call in closed.call_args_list}
+
+        resources = contextlib.ExitStack()
+        resources.callback(refuse)
+        with patch.object(kernel, 'CreatePipe', side_effect=create_pipe), \
+             patch.object(kernel, 'CloseHandle', wraps=original_close) as closed, \
+             patch.object(kernel, 'DeleteProcThreadAttributeList', wraps=kernel.DeleteProcThreadAttributeList) as deleted, \
+             patch.object(security, 'FreeSid', wraps=security.FreeSid) as freed, \
+             patch.object(candidate._api, 'private_desktop', return_value=(None, resources)), \
+             patch.object(kernel, 'CreateProcessW', side_effect=refuse), \
+             contextlib.redirect_stderr(io.StringIO()):
+            try:
+                with self.assertRaises(RuntimeError):
+                    candidate.start()
+                self.assertEqual(len(pipes), 6)
+                self.assertTrue(set(pipes).issubset(closed_handles()))
+                deleted.assert_called_once()
+                freed.assert_called_once()
+                self.assertEqual(candidate.launches, 0)
+            finally:
+                observed = closed_handles()
+                for handle in set(pipes) - observed:
+                    original_close(handle)
+
 
 if __name__ == '__main__':
     unittest.main()

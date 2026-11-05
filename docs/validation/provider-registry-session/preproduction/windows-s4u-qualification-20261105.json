@@ -1,0 +1,69 @@
+{
+  "schema": "windows-launch-context-qualification-v1",
+  "service_base_commit": "c01995ba0853a2291d7f346fb4db68cd9241fcb2",
+  "vault_commit": "99c8709007e6573d0d823e00845b4feb3c269266",
+  "python": "3.12.10",
+  "node": "22.23.4",
+  "node_sha256": "dccc52de28d8df2ee22d2062424f8c563070d95d8ad70c54c4bf01d590dec14f",
+  "launcher_source_sha256": "6030d93c234f4ef25e16512b1434f4d5ed824ae97de31b3b84ebe152375a109b",
+  "scope": "isolated fixed Node version program under S4U",
+  "session_id": 0,
+  "authority_is_appcontainer": false,
+  "candidate_is_appcontainer": true,
+  "candidate_integrity_sid": "S-1-16-4096",
+  "candidate_capability_count": 0,
+  "source_qualification": [
+    {
+      "run": 11,
+      "kind": "start",
+      "result": "PASS",
+      "receipt": "s4u-result-99abc9b0ef73407c891768bbb5e1e46d.json",
+      "receipt_sha256": "2f69d4a7d576f4020560b9322a8e47745f3bc68271257337c004f925048b03d4"
+    },
+    {
+      "run": 12,
+      "kind": "CreateProcessW refusal",
+      "result": "PASS",
+      "no_business_entry": true,
+      "no_live_child": true,
+      "receipt": "s4u-result-d69403a51c2a42cb9a81d035b487bfb7.json",
+      "receipt_sha256": "0ede15a14a8f42fd9a5b8f4d96242881ec77f4ad84f7f234bbaf01b02181c5dd"
+    },
+    {
+      "run": 13,
+      "kind": "AssignProcessToJobObject refusal",
+      "result": "PASS",
+      "no_business_entry": true,
+      "no_live_child": true,
+      "receipt": "s4u-result-d683d926909142a2af72a7f3b0108d31.json",
+      "receipt_sha256": "ed2676a0c97a511322e6432963e79c6e4d501c9ac4d6d5897ea74a7c9e2f8bc6"
+    },
+    {
+      "run": 14,
+      "kind": "CloseDesktop reported failure",
+      "result": "PASS",
+      "native_desktop_closed_before_simulated_error": true,
+      "code_locks_released": true,
+      "process_handle_released": true,
+      "child_returncode": 0,
+      "no_live_child": true,
+      "receipt": "s4u-result-5d401d91bbeb4e11bce3dc8677badca1.json",
+      "receipt_sha256": "149d6762f532231e91e5b355c212823d005cdb14c6992d55c8d30d850161a2cc"
+    }
+  ],
+  "local_tests": {
+    "test_windows_launch_context": 11,
+    "test_windows_candidate": 18,
+    "test_startup_trace": 6,
+    "test_api_node_binding": 2,
+    "test_windows_mcp_candidate": 12,
+    "failures": 0,
+    "skipped": 0
+  },
+  "provider_calls": 0,
+  "diagnostic_runs_used": 14,
+  "diagnostic_task_enabled": false,
+  "diagnostic_task_instances": 0,
+  "installed_cutover_performed": false,
+  "installed_qualification": "NO_GO"
+}

@@ -11,7 +11,7 @@ import operator_runtime  # Reject unsupported Python before business dependencie
 
 import ctypes as c
 from ctypes import wintypes as w
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 import hashlib
 import hmac
 import json
@@ -55,6 +55,10 @@ def _startup_phase(phase):
         raise
     else:
         _startup_trace(phase, 'passed')
+
+
+# Window station selection is process-wide during private desktop creation.
+_WINDOW_STATION_LOCK = threading.Lock()
 
 
 class _Startup(c.Structure):
@@ -110,6 +114,7 @@ class _Windows:
         self.userenv = c.WinDLL('userenv', use_last_error=True)
         definitions = (
             (self.kernel, 'GetCurrentProcess', [], w.HANDLE),
+            (self.kernel, 'ProcessIdToSessionId', [w.DWORD, c.POINTER(w.DWORD)], w.BOOL),
             (self.kernel, 'CloseHandle', [w.HANDLE], w.BOOL),
             (self.kernel, 'LocalFree', [c.c_void_p], c.c_void_p),
             (self.kernel, 'CreateFileW', [w.LPCWSTR, w.DWORD, w.DWORD, c.c_void_p, w.DWORD, w.DWORD, w.HANDLE], w.HANDLE),
@@ -252,9 +257,73 @@ class _Windows:
         finally:
             self.kernel.FindClose(handle)
 
+    def private_desktop(self, user, app):
+        session = w.DWORD()
+        self.check(self.kernel.ProcessIdToSessionId(os.getpid(), c.byref(session)))
+        resources = ExitStack()
+        if session.value != 0:
+            return None, resources
+        api = c.WinDLL('user32', use_last_error=True)
+        api.GetProcessWindowStation.restype = w.HANDLE
+        api.CreateWindowStationW.argtypes = [w.LPCWSTR, w.DWORD, w.DWORD, c.POINTER(_SecurityAttributes)]
+        api.CreateWindowStationW.restype = w.HANDLE
+        api.SetProcessWindowStation.argtypes = [w.HANDLE]
+        api.SetProcessWindowStation.restype = w.BOOL
+        api.CreateDesktopW.argtypes = [w.LPCWSTR, w.LPCWSTR, c.c_void_p, w.DWORD, w.DWORD, c.POINTER(_SecurityAttributes)]
+        api.CreateDesktopW.restype = w.HANDLE
+        api.CloseDesktop.argtypes = [w.HANDLE]
+        api.CloseDesktop.restype = w.BOOL
+        api.CloseWindowStation.argtypes = [w.HANDLE]
+        api.CloseWindowStation.restype = w.BOOL
+        original = self.check(api.GetProcessWindowStation())
+        name = 'CodexCandidate' + uuid.uuid4().hex
+
+        def attributes(access):
+            descriptor = c.c_void_p()
+            text = f'O:{user}D:P(A;;GA;;;SY)(A;;GA;;;{user})(A;;{access};;;{app})S:(ML;;NW;;;LW)'
+            self.check(self.security.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                text, 1, c.byref(descriptor), None))
+            return descriptor, _SecurityAttributes(c.sizeof(_SecurityAttributes), descriptor, False)
+
+        try:
+            descriptor, security = attributes('0x2037f')
+            try:
+                c.set_last_error(0)
+                station = self.check(api.CreateWindowStationW(name, 0, 0xf037f, c.byref(security)))
+                resources.callback(lambda: self.check(api.CloseWindowStation(station)))
+                if c.get_last_error() == 183:
+                    raise RuntimeError('Private window station must be newly created')
+            finally:
+                self.kernel.LocalFree(descriptor)
+            self.check(api.SetProcessWindowStation(station))
+            try:
+                descriptor, security = attributes('0x201ff')
+                try:
+                    desktop = self.check(api.CreateDesktopW('Candidate', None, None, 0, 0xf01ff, c.byref(security)))
+                    resources.callback(lambda: self.check(api.CloseDesktop(desktop)))
+                finally:
+                    self.kernel.LocalFree(descriptor)
+            finally:
+                self.check(api.SetProcessWindowStation(original))
+            return name + '\\Candidate', resources
+        except BaseException:
+            resources.close()
+            raise
+
     def spawn(self, command, environment, cwd, profile, app_sid, authority_identity, locks):
         import msvcrt
         sid = c.c_void_p()
+        with _startup_phase('register_appcontainer'):
+            registered = c.c_void_p()
+            hr = self.userenv.CreateAppContainerProfile(profile, profile, profile, None, 0, c.byref(registered))
+            try:
+                if hr & 0xffffffff not in (0, 0x800700b7):
+                    raise RuntimeError(f'Cannot register qualified AppContainer: {hr & 0xffffffff:#x}')
+                if registered.value and self.sid_text(registered) != app_sid:
+                    raise RuntimeError('Registered AppContainer identity changed')
+            finally:
+                if registered.value:
+                    self.security.FreeSid(registered)
         with _startup_phase('resolve_appcontainer'):
             hr = self.userenv.DeriveAppContainerSidFromAppContainerName(profile, c.byref(sid))
             if hr != 0:
@@ -264,6 +333,7 @@ class _Windows:
         info = _ProcessInfo()
         job = None
         success = False
+        desktop_resources = ExitStack()
         try:
             with _startup_phase('appcontainer_identity'):
                 if self.sid_text(sid) != app_sid:
@@ -305,6 +375,9 @@ class _Windows:
                 cmdline = c.create_unicode_buffer(subprocess.list2cmdline(command))
                 block = c.create_unicode_buffer('\0'.join(key+'='+value for key, value in sorted(environment.items()))+'\0\0')
             flags = 0x80000 | 0x8000000 | 0x400 | 0x4
+            with _startup_phase('private_desktop'), _WINDOW_STATION_LOCK:
+                desktop_name, desktop_resources = self.private_desktop(authority_identity['user_sid'], app_sid)
+                startup.startup.desktop = desktop_name
             with _startup_phase('CreateProcessW'):
                 self.check(self.kernel.CreateProcessW(command[0], cmdline, None, None, True, flags,
                                                      block, str(cwd), c.byref(startup), c.byref(info)))
@@ -328,36 +401,39 @@ class _Windows:
             with _startup_phase('ResumeThread'):
                 if self.kernel.ResumeThread(info.thread) != 1:
                     raise RuntimeError('Candidate was not safely suspended before resume')
-            process = RunningCandidate(self, info.process, job, info.pid, identity, streams, locks)
+            process = RunningCandidate(self, info.process, job, info.pid, identity, streams, locks, desktop_resources)
             success = True
             return process
         finally:
-            with _startup_phase('native_cleanup'):
-                if info.thread:
-                    self.kernel.CloseHandle(info.thread)
-                if not success:
-                    if info.process:
-                        self.kernel.TerminateProcess(info.process, 1)
-                        self.kernel.WaitForSingleObject(info.process, 5000)
-                        self.kernel.CloseHandle(info.process)
-                    if job:
-                        self.kernel.CloseHandle(job)
-                    for stream in streams:
-                        stream.close()
-                for handle in handles:
-                    self.kernel.CloseHandle(handle)
+            with _startup_phase('native_cleanup'), ExitStack() as cleanup:
+                cleanup.callback(self.security.FreeSid, sid)
                 if attributes:
-                    self.kernel.DeleteProcThreadAttributeList(attributes)
-                self.security.FreeSid(sid)
+                    cleanup.callback(self.kernel.DeleteProcThreadAttributeList, attributes)
+                for handle in handles:
+                    cleanup.callback(self.kernel.CloseHandle, handle)
+                if not success:
+                    cleanup.callback(desktop_resources.close)
+                    for stream in streams:
+                        cleanup.callback(stream.close)
+                    if job:
+                        cleanup.callback(self.kernel.CloseHandle, job)
+                    if info.process:
+                        cleanup.callback(self.kernel.CloseHandle, info.process)
+                if info.thread:
+                    cleanup.callback(self.kernel.CloseHandle, info.thread)
+                if not success and info.process:
+                    self.kernel.TerminateProcess(info.process, 1)
+                    self.kernel.WaitForSingleObject(info.process, 5000)
 
 
 class RunningCandidate:
     """Owned process and descendants, with exactly three inherited pipe handles."""
-    def __init__(self, api, process, job, pid, identity, streams, locks):
+    def __init__(self, api, process, job, pid, identity, streams, locks, desktop_resources=None):
         self._api, self._process, self._job = api, process, job
         self.pid, self.identity, self.returncode = pid, identity, None
         self.stdin, self.stdout, self.stderr = streams
         self._locks = locks
+        self._desktop_resources = desktop_resources or ExitStack()
 
     def wait(self, timeout=None):
         milliseconds = 0xffffffff if timeout is None else max(0, int(timeout * 1000))
@@ -372,9 +448,12 @@ class RunningCandidate:
         if self._job:
             self._api.kernel.CloseHandle(self._job)
             self._job = None
-        for handle in self._locks:
-            self._api.kernel.CloseHandle(handle)
-        self._locks.clear()
+        try:
+            self._desktop_resources.close()
+        finally:
+            for handle in self._locks:
+                self._api.kernel.CloseHandle(handle)
+            self._locks.clear()
         return self.returncode
 
     def communicate(self, input=None, timeout=None):
@@ -430,13 +509,17 @@ class RunningCandidate:
 
     def close(self):
         if self._process:
-            if self.returncode is None:
-                self.kill()
-                self.wait(5)
-            for stream in (self.stdin, self.stdout, self.stderr):
-                stream.close()
-            self._api.kernel.CloseHandle(self._process)
-            self._process = None
+            try:
+                if self.returncode is None:
+                    self.kill()
+                    self.wait(5)
+            finally:
+                if self.returncode is not None:
+                    with ExitStack() as cleanup:
+                        cleanup.callback(self._api.kernel.CloseHandle, self._process)
+                        for stream in (self.stdin, self.stdout, self.stderr):
+                            cleanup.callback(stream.close)
+                        self._process = None
 
     def __enter__(self):
         return self
