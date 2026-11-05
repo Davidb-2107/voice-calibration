@@ -93,9 +93,7 @@ class DesktopContextTests(unittest.TestCase):
 
 
 class DesktopLifetimeTests(unittest.TestCase):
-    def test_process_exit_releases_job_before_desktop_resources(self):
-        events = []
-
+    def process(self, resources, events, locks=None):
         def exit_code(process, output):
             output._obj.value = 0
             return True
@@ -104,16 +102,63 @@ class DesktopLifetimeTests(unittest.TestCase):
             WaitForSingleObject=Mock(return_value=0),
             GetExitCodeProcess=Mock(side_effect=exit_code),
             CloseHandle=Mock(side_effect=lambda handle: events.append(('handle', handle))),
+            TerminateJobObject=Mock(return_value=True),
         )
+        native = SimpleNamespace(kernel=kernel, check=lambda result: result)
+        return RunningCandidate(native, 10, 20, 30, {}, [Mock(), Mock(), Mock()],
+                                [] if locks is None else locks, resources)
+
+    def test_process_exit_releases_job_before_desktop_resources(self):
+        events = []
         resources = ExitStack()
         resources.callback(lambda: events.append(('desktop', 'closed')))
-        native = SimpleNamespace(kernel=kernel, check=lambda result: result)
-        process = RunningCandidate(native, 10, 20, 30, {}, [Mock(), Mock(), Mock()], [], resources)
+        process = self.process(resources, events)
         self.assertEqual(process.wait(1), 0)
         self.assertEqual(events, [('handle', 20), ('desktop', 'closed')])
         process.close()
         process.close()
         self.assertEqual(events.count(('desktop', 'closed')), 1)
+
+    def test_desktop_close_failure_still_releases_code_locks(self):
+        events = []
+        resources = ExitStack()
+        resources.callback(Mock(side_effect=OSError('desktop close refused')))
+        process = self.process(resources, events, [99])
+        with self.assertRaisesRegex(OSError, 'desktop close refused'):
+            process.wait(1)
+        process.close()
+        self.assertEqual(process._locks, [])
+        self.assertIn(('handle', 99), events)
+        self.assertIsNone(process._process)
+
+    def test_close_finishes_streams_and_process_after_late_wait_failure(self):
+        events = []
+        resources = ExitStack()
+        resources.callback(Mock(side_effect=OSError('desktop close refused')))
+        process = self.process(resources, events, [99])
+        with self.assertRaisesRegex(OSError, 'desktop close refused'):
+            process.close()
+        for stream in (process.stdin, process.stdout, process.stderr):
+            stream.close.assert_called_once()
+        self.assertEqual(process._locks, [])
+        self.assertIn(('handle', 10), events)
+        self.assertIsNone(process._process)
+
+    def test_timeout_keeps_ownership_until_exit_is_confirmed(self):
+        import subprocess
+        events = []
+        resources = ExitStack()
+        closed = Mock()
+        resources.callback(closed)
+        process = self.process(resources, events, [99])
+        process._api.kernel.WaitForSingleObject.return_value = 258
+        with self.assertRaises(subprocess.TimeoutExpired):
+            process.close()
+        self.assertEqual(process._process, 10)
+        self.assertEqual(process._locks, [99])
+        closed.assert_not_called()
+        for stream in (process.stdin, process.stdout, process.stderr):
+            stream.close.assert_not_called()
 
 
 class ProfileContextTests(unittest.TestCase):

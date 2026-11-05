@@ -405,24 +405,25 @@ class _Windows:
             success = True
             return process
         finally:
-            with _startup_phase('native_cleanup'):
-                if info.thread:
-                    self.kernel.CloseHandle(info.thread)
-                if not success:
-                    if info.process:
-                        self.kernel.TerminateProcess(info.process, 1)
-                        self.kernel.WaitForSingleObject(info.process, 5000)
-                        self.kernel.CloseHandle(info.process)
-                    if job:
-                        self.kernel.CloseHandle(job)
-                    for stream in streams:
-                        stream.close()
-                    desktop_resources.close()
-                for handle in handles:
-                    self.kernel.CloseHandle(handle)
+            with _startup_phase('native_cleanup'), ExitStack() as cleanup:
+                cleanup.callback(self.security.FreeSid, sid)
                 if attributes:
-                    self.kernel.DeleteProcThreadAttributeList(attributes)
-                self.security.FreeSid(sid)
+                    cleanup.callback(self.kernel.DeleteProcThreadAttributeList, attributes)
+                for handle in handles:
+                    cleanup.callback(self.kernel.CloseHandle, handle)
+                if not success:
+                    cleanup.callback(desktop_resources.close)
+                    for stream in streams:
+                        cleanup.callback(stream.close)
+                    if job:
+                        cleanup.callback(self.kernel.CloseHandle, job)
+                    if info.process:
+                        cleanup.callback(self.kernel.CloseHandle, info.process)
+                if info.thread:
+                    cleanup.callback(self.kernel.CloseHandle, info.thread)
+                if not success and info.process:
+                    self.kernel.TerminateProcess(info.process, 1)
+                    self.kernel.WaitForSingleObject(info.process, 5000)
 
 
 class RunningCandidate:
@@ -447,10 +448,12 @@ class RunningCandidate:
         if self._job:
             self._api.kernel.CloseHandle(self._job)
             self._job = None
-        self._desktop_resources.close()
-        for handle in self._locks:
-            self._api.kernel.CloseHandle(handle)
-        self._locks.clear()
+        try:
+            self._desktop_resources.close()
+        finally:
+            for handle in self._locks:
+                self._api.kernel.CloseHandle(handle)
+            self._locks.clear()
         return self.returncode
 
     def communicate(self, input=None, timeout=None):
@@ -506,13 +509,17 @@ class RunningCandidate:
 
     def close(self):
         if self._process:
-            if self.returncode is None:
-                self.kill()
-                self.wait(5)
-            for stream in (self.stdin, self.stdout, self.stderr):
-                stream.close()
-            self._api.kernel.CloseHandle(self._process)
-            self._process = None
+            try:
+                if self.returncode is None:
+                    self.kill()
+                    self.wait(5)
+            finally:
+                if self.returncode is not None:
+                    with ExitStack() as cleanup:
+                        cleanup.callback(self._api.kernel.CloseHandle, self._process)
+                        for stream in (self.stdin, self.stdout, self.stderr):
+                            cleanup.callback(stream.close)
+                        self._process = None
 
     def __enter__(self):
         return self

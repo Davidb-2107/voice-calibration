@@ -92,3 +92,20 @@ MCP installés, leur composition et leur reconnexion restent à qualifier dans u
 fenêtre distincte autorisée. Le refus historique du 4 novembre au matin demeure
 indéterminé. Les observations instrumentées du soir et la reproduction S4U
 étayent ce correctif.
+
+### Fermeture USER refusée
+
+La revue du premier portage a identifié un P2 dans le nettoyage. Une exception
+de fermeture USER pouvait sauter la libération des verrous de code, pipes,
+attributs et SID. Le nettoyage natif utilise maintenant un ExitStack enregistré
+avant les appels pouvant lever. Les verrous de code sont libérés dans un finally.
+Une erreur tardive ferme aussi les flux et le handle du processus, dès lors que
+sa sortie est confirmée. Un timeout conserve la propriété des ressources.
+
+Les tests ciblés passent à onze cas, les tests de trace à six. Les autres
+contrepreuves Windows, Node et MCP donnent respectivement dix-huit, deux et douze
+PASS. Les quatre derniers essais S4U qualifient les octets de cette correction,
+avec démarrage normal, refus de création, refus Job Object et erreur de fermeture
+USER rapportée après fermeture réelle du handle. Cette dernière contrepreuve
+confirme aussi la réouverture en écriture du code, sans écriture d'octets.
+Les quatorze essais autorisés sont terminés et la tâche reste désactivée.

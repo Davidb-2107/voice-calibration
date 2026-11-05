@@ -5,7 +5,7 @@
   "python": "3.12.10",
   "node": "22.23.4",
   "node_sha256": "dccc52de28d8df2ee22d2062424f8c563070d95d8ad70c54c4bf01d590dec14f",
-  "launcher_source_sha256": "fea3a116772d9db250bc477a48b54c11cbbef195145a42a0267f4447ceee50d7",
+  "launcher_source_sha256": "6030d93c234f4ef25e16512b1434f4d5ed824ae97de31b3b84ebe152375a109b",
   "scope": "isolated fixed Node version program under S4U",
   "session_id": 0,
   "authority_is_appcontainer": false,
@@ -14,50 +14,56 @@
   "candidate_capability_count": 0,
   "source_qualification": [
     {
-      "run": 7,
+      "run": 11,
       "kind": "start",
       "result": "PASS",
-      "receipt": "s4u-result-bc233155ce18431fb5108a831a970545.json",
-      "receipt_sha256": "66aa3471906b2b28c9f649740f78a3a53c3e926f04e4e6ff390b0cbf11dadc41"
+      "receipt": "s4u-result-99abc9b0ef73407c891768bbb5e1e46d.json",
+      "receipt_sha256": "2f69d4a7d576f4020560b9322a8e47745f3bc68271257337c004f925048b03d4"
     },
     {
-      "run": 8,
-      "kind": "restart",
-      "result": "PASS",
-      "receipt": "s4u-result-61163f76ffc24857bc859b7c873c9e29.json",
-      "receipt_sha256": "24aa0eee9ef3b5063b7322dd4eddcf42742f63e748d9ad091c818534f9052f44"
-    },
-    {
-      "run": 9,
+      "run": 12,
       "kind": "CreateProcessW refusal",
       "result": "PASS",
       "no_business_entry": true,
       "no_live_child": true,
-      "receipt": "s4u-result-2e9ebe395db04bb598c8c042e63c91ad.json",
-      "receipt_sha256": "9d400e0c0f17607cbdd0aa3fee5f4d7d802a73a04e1448bf9d1d480e2e8dab85"
+      "receipt": "s4u-result-d69403a51c2a42cb9a81d035b487bfb7.json",
+      "receipt_sha256": "0ede15a14a8f42fd9a5b8f4d96242881ec77f4ad84f7f234bbaf01b02181c5dd"
     },
     {
-      "run": 10,
+      "run": 13,
       "kind": "AssignProcessToJobObject refusal",
       "result": "PASS",
       "no_business_entry": true,
       "no_live_child": true,
-      "receipt": "s4u-result-9ba8ddb34325474ba727720d0efa9834.json",
-      "receipt_sha256": "49c3a84a1dce46c31dd2e8d034eac16528b722939ba454e2637178cf1b5c2c03"
+      "receipt": "s4u-result-d683d926909142a2af72a7f3b0108d31.json",
+      "receipt_sha256": "ed2676a0c97a511322e6432963e79c6e4d501c9ac4d6d5897ea74a7c9e2f8bc6"
+    },
+    {
+      "run": 14,
+      "kind": "CloseDesktop reported failure",
+      "result": "PASS",
+      "native_desktop_closed_before_simulated_error": true,
+      "code_locks_released": true,
+      "process_handle_released": true,
+      "child_returncode": 0,
+      "no_live_child": true,
+      "receipt": "s4u-result-5d401d91bbeb4e11bce3dc8677badca1.json",
+      "receipt_sha256": "149d6762f532231e91e5b355c212823d005cdb14c6992d55c8d30d850161a2cc"
     }
   ],
   "local_tests": {
-    "test_windows_launch_context": 8,
+    "test_windows_launch_context": 11,
     "test_windows_candidate": 18,
-    "test_startup_trace": 5,
+    "test_startup_trace": 6,
     "test_api_node_binding": 2,
     "test_windows_mcp_candidate": 12,
     "failures": 0,
     "skipped": 0
   },
   "provider_calls": 0,
-  "diagnostic_runs_used": 10,
+  "diagnostic_runs_used": 14,
   "diagnostic_task_enabled": false,
+  "diagnostic_task_instances": 0,
   "installed_cutover_performed": false,
   "installed_qualification": "NO_GO"
 }
